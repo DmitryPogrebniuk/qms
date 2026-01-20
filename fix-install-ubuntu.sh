@@ -131,13 +131,13 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     
     log_info "Starting QMS services..."
     cd "$INSTALL_DIR"
-    docker-compose -f infra/docker-compose.yml up -d
+    docker compose -f infra/docker-compose.yml up -d
     
     log_info "Waiting for services to start..."
     sleep 10
     
     log_info "Service status:"
-    docker-compose -f infra/docker-compose.yml ps
+    docker compose -f infra/docker-compose.yml ps
     
     echo ""
     log_info "✅ QMS is now running!"

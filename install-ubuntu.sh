@@ -190,8 +190,8 @@ LOG_LEVEL=info
 EOF
 
     # Update docker-compose.yml with passwords
-    sed -i "s/POSTGRES_PASSWORD: qms_password_secure/POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}/" "$INSTALL_DIR/infra/docker-compose.yml"
-    sed -i "s/--requirepass redis_password_secure/--requirepass ${REDIS_PASSWORD}/" "$INSTALL_DIR/infra/docker-compose.yml"
+    sed -i "s|POSTGRES_PASSWORD: qms_password_secure|POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}|" "$INSTALL_DIR/infra/docker-compose.yml"
+    sed -i "s|--requirepass redis_password_secure|--requirepass ${REDIS_PASSWORD}|" "$INSTALL_DIR/infra/docker-compose.yml"
     
     chmod 600 "$INSTALL_DIR/apps/api/.env"
     chown $QMS_USER:$QMS_USER "$INSTALL_DIR/apps/api/.env"
