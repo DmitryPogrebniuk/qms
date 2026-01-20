@@ -42,7 +42,7 @@ The installation script automatically installs and configures:
 
 ```bash
 # Download the script
-wget https://raw.githubusercontent.com/your-org/qms/main/install-ubuntu.sh
+wget https://raw.githubusercontent.com/DmitryPogrebniuk/qms/main/install-ubuntu.sh
 
 # Make it executable
 chmod +x install-ubuntu.sh
@@ -55,7 +55,7 @@ sudo ./install-ubuntu.sh
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/qms.git
+git clone https://github.com/DmitryPogrebniuk/qms.git
 cd qms
 
 # Run installation script

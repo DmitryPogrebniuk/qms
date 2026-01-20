@@ -336,7 +336,7 @@ npm run format
 
 ```bash
 # 1. Clone repo
-git clone <repo> /opt/qms
+git clone https://github.com/DmitryPogrebniuk/qms.git /opt/qms
 cd /opt/qms
 
 # 2. Update environment
