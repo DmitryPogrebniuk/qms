@@ -1,0 +1,31 @@
+{
+  "name": "cisco-qms",
+  "version": "1.0.0",
+  "description": "Production-ready QMS for Cisco UCCX 15, MediaSense 11.5, CCP 15",
+  "private": true,
+  "workspaces": [
+    "apps/api",
+    "apps/web",
+    "packages/shared"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w apps/api\" \"npm run dev -w apps/web\"",
+    "build": "npm run build -w packages/shared && npm run build -w apps/api && npm run build -w apps/web",
+    "start": "npm start -w apps/api",
+    "test": "npm run test -w apps/api && npm run test -w apps/web",
+    "lint": "eslint . --ext .ts,.tsx",
+    "docker:up": "docker-compose -f infra/docker-compose.yml up -d",
+    "docker:down": "docker-compose -f infra/docker-compose.yml down",
+    "docker:logs": "docker-compose -f infra/docker-compose.yml logs -f"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "concurrently": "^8.2.2",
+    "eslint": "^8.56.0",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}

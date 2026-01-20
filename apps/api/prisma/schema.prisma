@@ -1,0 +1,582 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// USERS & RBAC
+// ============================================================================
+
+model User {
+  id String @id @default(cuid())
+  keycloakId String? @unique
+  username String @unique @db.VarChar(255)
+  email String? @db.VarChar(255)
+  fullName String? @db.VarChar(255)
+  password String? // For local authentication (hashed with bcrypt)
+  role Role @default(USER)
+  isActive Boolean @default(true)
+  
+  // UCCX synced fields (if user is an agent)
+  agentId String? @unique @db.VarChar(100)
+  teamCodes String[] @default([])
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  // Relations
+  evaluationsCreated Evaluation[]
+  coachingPlansCreated CoachingPlan[]
+  disputeResolutions Dispute[]
+  auditLogs AuditLog[]
+  supervisedTeams Team[]
+
+  @@index([keycloakId])
+  @@index([agentId])
+  @@index([role])
+}
+
+enum Role {
+  ADMIN
+  QA
+  SUPERVISOR
+  USER
+}
+
+// ============================================================================
+// UCCX ENTITIES (Source of Truth)
+// ============================================================================
+
+model Team {
+  id String @id @default(cuid())
+  teamCode String @unique @db.VarChar(100)
+  displayName String @db.VarChar(255)
+  description String?
+  
+  supervisorIds String[] @default([])
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lastSyncedAt DateTime?
+
+  // Relations
+  agents AgentTeam[]
+  supervisors User[]
+  evaluations Evaluation[]
+  recordings Recording[]
+  coachingPlans CoachingPlan[]
+  samplingRules SamplingRule[]
+  dailyStats DailyTeamStats[]
+
+  @@index([teamCode])
+}
+
+model Agent {
+  id String @id @default(cuid())
+  agentId String @unique @db.VarChar(100) // AD login == UCCX agentId
+  fullName String @db.VarChar(255)
+  email String? @db.VarChar(255)
+  activeFlag Boolean @default(true)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lastSyncedAt DateTime?
+
+  // Relations
+  teams AgentTeam[]
+  skills AgentSkill[]
+  recordings Recording[]
+  evaluations Evaluation[]
+  coachingPlans CoachingPlan[]
+  chats Chat[]
+  dailyStats DailyAgentStats[]
+
+  @@index([agentId])
+}
+
+model AgentTeam {
+  id String @id @default(cuid())
+  agentId String
+  teamId String
+  
+  joinedAt DateTime @default(now())
+  leftAt DateTime?
+
+  // Relations
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, teamId])
+  @@index([agentId])
+  @@index([teamId])
+}
+
+model Skill {
+  id String @id @default(cuid())
+  skillId String @unique @db.VarChar(100)
+  skillName String @db.VarChar(255)
+  description String?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  agents AgentSkill[]
+
+  @@index([skillId])
+}
+
+model AgentSkill {
+  id String @id @default(cuid())
+  agentId String
+  skillId String
+  proficiency Int? // 1-10 scale
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  skill Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, skillId])
+  @@index([agentId])
+  @@index([skillId])
+}
+
+// ============================================================================
+// RECORDINGS (MediaSense)
+// ============================================================================
+
+model Recording {
+  id String @id @default(cuid())
+  mediasenseRecordingId String @unique @db.VarChar(255)
+  
+  agentId String
+  teamCode String
+  
+  startTime DateTime @db.Timestamptz()
+  endTime DateTime @db.Timestamptz()
+  durationSeconds Int
+  
+  contactId String? @db.VarChar(100)
+  callId String? @db.VarChar(100)
+  direction String @db.VarChar(20) // 'inbound' or 'outbound'
+  
+  ani String? @db.VarChar(50)
+  dnis String? @db.VarChar(50)
+  csq String? @db.VarChar(100)
+  wrapUpReason String? @db.VarChar(100)
+  
+  transferCount Int? @default(0)
+  holdTimeSeconds Int? @default(0)
+  
+  isArchived Boolean @default(false)
+  rawJson Json?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  team Team @relation(fields: [teamCode], references: [teamCode], onDelete: Restrict)
+  evaluation Evaluation?
+  bookmarks EvaluationBookmark[]
+
+  @@index([agentId])
+  @@index([teamCode])
+  @@index([startTime])
+  @@index([mediasenseRecordingId])
+  @@index([contactId])
+  @@index([callId])
+}
+
+// ============================================================================
+// CHATS (CCP)
+// ============================================================================
+
+model Chat {
+  id String @id @default(cuid())
+  agentId String
+  teamCode String
+  
+  contactId String? @db.VarChar(100)
+  
+  startTime DateTime @db.Timestamptz()
+  endTime DateTime? @db.Timestamptz()
+  
+  participants String[] @default([])
+  messageCount Int @default(0)
+  
+  rawJson Json?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  evaluation Evaluation?
+  messages ChatMessage[]
+
+  @@index([agentId])
+  @@index([teamCode])
+  @@index([startTime])
+  @@index([contactId])
+}
+
+model ChatMessage {
+  id String @id @default(cuid())
+  chatId String
+  senderName String
+  messageText String @db.Text
+  timestamp DateTime @db.Timestamptz()
+  
+  createdAt DateTime @default(now())
+
+  // Relations
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId])
+  @@index([timestamp])
+}
+
+// ============================================================================
+// QUALITY MANAGEMENT
+// ============================================================================
+
+model ScorecardTemplate {
+  id String @id @default(cuid())
+  name String @db.VarChar(255)
+  version Int @default(1)
+  description String?
+  
+  sections Json // Array of ScorecardSection
+  isActive Boolean @default(true)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  evaluations Evaluation[]
+
+  @@index([isActive])
+  @@index([createdAt])
+}
+
+model Evaluation {
+  id String @id @default(cuid())
+  
+  // Can evaluate either a recording or chat
+  recordingId String? @unique
+  chatId String? @unique
+  
+  scorecardTemplateId String
+  
+  evaluatorId String
+  agentId String
+  teamCode String
+  
+  status EvaluationStatus @default(DRAFT)
+  
+  responses Json // Array of EvaluationResponse
+  totalScore Float?
+  comments String?
+  
+  createdAt DateTime @default(now())
+  submittedAt DateTime?
+  acknowledgedAt DateTime?
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  recording Recording? @relation(fields: [recordingId], references: [id], onDelete: SetNull)
+  chat Chat? @relation(fields: [chatId], references: [id], onDelete: SetNull)
+  scorecard ScorecardTemplate @relation(fields: [scorecardTemplateId], references: [id], onDelete: Restrict)
+  evaluator User @relation(fields: [evaluatorId], references: [id], onDelete: Restrict)
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  team Team @relation(fields: [teamCode], references: [teamCode], onDelete: Restrict)
+  bookmarks EvaluationBookmark[]
+  disputes Dispute[]
+  coachingPlan CoachingPlan?
+
+  @@index([evaluatorId])
+  @@index([agentId])
+  @@index([teamCode])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum EvaluationStatus {
+  DRAFT
+  SUBMITTED
+  ACKNOWLEDGED
+  DISPUTED
+  RESOLVED
+}
+
+model EvaluationBookmark {
+  id String @id @default(cuid())
+  evaluationId String
+  recordingId String?
+  
+  timestamp Int // seconds into recording
+  comment String?
+  
+  createdAt DateTime @default(now())
+
+  // Relations
+  evaluation Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  recording Recording? @relation(fields: [recordingId], references: [id], onDelete: SetNull)
+
+  @@index([evaluationId])
+  @@index([recordingId])
+}
+
+// ============================================================================
+// DISPUTES
+// ============================================================================
+
+model Dispute {
+  id String @id @default(cuid())
+  evaluationId String
+  
+  userId String
+  comment String @db.Text
+  
+  resolvedBy String?
+  resolutionComment String? @db.Text
+  
+  status DisputeStatus @default(OPEN)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  evaluation Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([evaluationId])
+  @@index([userId])
+  @@index([status])
+}
+
+enum DisputeStatus {
+  OPEN
+  RESOLVED
+}
+
+// ============================================================================
+// COACHING
+// ============================================================================
+
+model CoachingPlan {
+  id String @id @default(cuid())
+  evaluationId String @unique
+  
+  agentId String
+  supervisorId String
+  teamCode String
+  
+  actionItems Json // Array of CoachingActionItem
+  
+  followUpEvaluationId String?
+  status CoachingStatus @default(ACTIVE)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  evaluation Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  supervisor User @relation(fields: [supervisorId], references: [id], onDelete: Restrict)
+  team Team @relation(fields: [teamCode], references: [teamCode], onDelete: Restrict)
+
+  @@index([agentId])
+  @@index([supervisorId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum CoachingStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+// ============================================================================
+// SAMPLING ENGINE
+// ============================================================================
+
+model SamplingRule {
+  id String @id @default(cuid())
+  name String @db.VarChar(255)
+  description String?
+  
+  samplePercentage Int
+  period SamplingPeriod
+  
+  criteria Json // SamplingCriteria
+  assignedQAs String[] @default([])
+  
+  isActive Boolean @default(true)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  team Team @relation(fields: [teamCode], references: [teamCode], onDelete: Cascade)
+  samplings SamplingRecord[]
+
+  teamCode String
+
+  @@index([isActive])
+  @@index([teamCode])
+}
+
+enum SamplingPeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+model SamplingRecord {
+  id String @id @default(cuid())
+  samplingRuleId String
+  
+  recordingId String
+  agentId String
+  
+  assignedToQA String?
+  
+  sampledAt DateTime @default(now())
+  evaluatedAt DateTime?
+  
+  createdAt DateTime @default(now())
+
+  // Relations
+  samplingRule SamplingRule @relation(fields: [samplingRuleId], references: [id], onDelete: Cascade)
+
+  @@index([samplingRuleId])
+  @@index([recordingId])
+  @@index([agentId])
+}
+
+// ============================================================================
+// STATISTICS (from UCCX)
+// ============================================================================
+
+model DailyAgentStats {
+  id String @id @default(cuid())
+  agentId String
+  date DateTime @db.Date()
+  
+  callsHandled Int
+  avgHandleTime Float
+  holdTime Float
+  transfers Int
+  wrapUpCounts Json // Record<string, number>
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, date])
+  @@index([agentId])
+  @@index([date])
+}
+
+model DailyTeamStats {
+  id String @id @default(cuid())
+  teamCode String
+  date DateTime @db.Date()
+  
+  totalCallsHandled Int
+  avgHandleTime Float
+  avgHoldTime Float
+  totalTransfers Int
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  team Team @relation(fields: [teamCode], references: [teamCode], onDelete: Cascade)
+
+  @@unique([teamCode, date])
+  @@index([teamCode])
+  @@index([date])
+}
+
+// ============================================================================
+// AUDIT LOGGING
+// ============================================================================
+
+model AuditLog {
+  id String @id @default(cuid())
+  userId String
+  userRole Role
+  
+  action AuditAction
+  resourceId String?
+  
+  filters Json?
+  ipAddress String? @db.VarChar(50)
+  
+  createdAt DateTime @default(now()) @db.Timestamptz()
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+enum AuditAction {
+  LOGIN
+  SEARCH
+  RECORD_VIEW
+  PLAYBACK_START
+  EVALUATION_CREATED
+  COACHING_CREATED
+  EVALUATION_SUBMITTED
+  DISPUTE_FILED
+}
+
+// ============================================================================
+// SYNC STATE
+// ============================================================================
+
+model SyncState {
+  id String @id @default(cuid())
+  syncType String @unique @db.VarChar(100) // 'uccx_full', 'uccx_incremental', 'mediasense', etc.
+  
+  lastSyncedAt DateTime?
+  nextSyncAt DateTime?
+  
+  watermark String? // For incremental syncs
+  status SyncStatus @default(IDLE)
+  
+  errorMessage String?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([syncType])
+  @@index([status])
+}
+
+enum SyncStatus {
+  IDLE
+  IN_PROGRESS
+  SUCCESS
+  FAILED
+}

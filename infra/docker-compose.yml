@@ -1,0 +1,162 @@
+version: '3.9'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: qms-postgres
+    environment:
+      POSTGRES_DB: qms
+      POSTGRES_USER: qms_user
+      POSTGRES_PASSWORD: qms_password_secure
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qms_user -d qms"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - qms_network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: qms-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - qms_network
+
+  # OpenSearch
+  opensearch:
+    image: opensearchproject/opensearch:2.11.1
+    container_name: qms-opensearch
+    environment:
+      - cluster.name=opensearch-cluster
+      - node.name=opensearch-node1
+      - discovery.seed_hosts=opensearch
+      - cluster.initial_master_nodes=opensearch-node1
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=SecurePassword123!
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    networks:
+      - qms_network
+
+  # Keycloak (OIDC Provider)
+  keycloak:
+    image: keycloak/keycloak:22.0.5
+    container_name: qms-keycloak
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin_password
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: qms_user
+      KC_DB_PASSWORD: qms_password_secure
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - start-dev
+    networks:
+      - qms_network
+
+  # NestJS API
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.api.simple
+    container_name: qms-api
+    environment:
+      NODE_ENV: development
+      API_PORT: 3000
+      DATABASE_URL: postgresql://qms_user:qms_password_secure@postgres:5432/qms
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      KEYCLOAK_ISSUER: http://keycloak:8080
+      KEYCLOAK_REALM: qms
+      KEYCLOAK_CLIENT_ID: qms-api
+      KEYCLOAK_CLIENT_SECRET: your-secret-key
+      JWT_SECRET: jwt_secret_key_change_me
+      UCCX_HOST: uccx.example.com
+      UCCX_PORT: 8443
+      UCCX_USERNAME: admin
+      UCCX_PASSWORD: password
+      MEDIASENSE_HOST: mediasense.example.com
+      MEDIASENSE_PORT: 8443
+      MEDIASENSE_USERNAME: admin
+      MEDIASENSE_PASSWORD: password
+      OPENSEARCH_HOST: opensearch
+      OPENSEARCH_PORT: 9200
+      OPENSEARCH_USERNAME: admin
+      OPENSEARCH_PASSWORD: SecurePassword123!
+      CORS_ORIGIN: http://localhost:5173,http://localhost:3000
+      LOG_LEVEL: debug
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../apps/api/src:/app/apps/api/src
+      - ../packages/shared/src:/app/packages/shared/src
+    networks:
+      - qms_network
+
+  # React Frontend
+  web:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.web
+    container_name: qms-web
+    ports:
+      - "5173:5173"
+    volumes:
+      - ../apps/web/src:/app/apps/web/src
+    networks:
+      - qms_network
+    depends_on:
+      - api
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: qms-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - api
+      - web
+    networks:
+      - qms_network
+
+volumes:
+  postgres_data:
+  redis_data:
+  opensearch_data:
+
+networks:
+  qms_network:
+    driver: bridge
