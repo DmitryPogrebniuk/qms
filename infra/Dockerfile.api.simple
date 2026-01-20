@@ -1,7 +1,10 @@
 # Build stage
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
 
 WORKDIR /build
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 
 # Copy only API files
 COPY apps/api/package.json apps/api/tsconfig.json ./
@@ -15,12 +18,12 @@ RUN npm install --legacy-peer-deps --no-fund
 RUN npm run build || echo "Build may fail, will use ts-node"
 
 # Runtime stage
-FROM node:18-alpine
+FROM node:18-slim
 
 WORKDIR /app
 
 # Install runtime dependencies
-RUN apk update && apk add --no-cache openssl
+RUN apt-get update && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 
 # Copy package files
 COPY apps/api/package.json ./
