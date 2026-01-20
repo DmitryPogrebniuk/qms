@@ -94,10 +94,12 @@ services:
       KEYCLOAK_CLIENT_ID: qms-api
       KEYCLOAK_CLIENT_SECRET: your-secret-key
       JWT_SECRET: jwt_secret_key_change_me
-      UCCX_HOST: uccx.example.com
-      UCCX_PORT: 8443
+      # UCCX High Availability Configuration
+      UCCX_NODES: uccx.example.com:8443
       UCCX_USERNAME: admin
       UCCX_PASSWORD: password
+      UCCX_TIMEOUT_MS: 30000
+      UCCX_RETRY_ATTEMPTS: 2
       MEDIASENSE_HOST: mediasense.example.com
       MEDIASENSE_PORT: 8443
       MEDIASENSE_USERNAME: admin
