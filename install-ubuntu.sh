@@ -12,7 +12,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Configuration
-QMS_REPO="https://github.com/your-org/qms.git"  # Update with your repo
+QMS_REPO="https://github.com/DmitryPogrebniuk/qms.git"
 QMS_BRANCH="main"
 INSTALL_DIR="/opt/qms"
 QMS_USER="qms"
