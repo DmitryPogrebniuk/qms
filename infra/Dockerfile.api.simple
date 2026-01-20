@@ -20,7 +20,7 @@ FROM node:18-alpine
 WORKDIR /app
 
 # Install runtime dependencies
-RUN apk add --no-cache openssl openssl-dev
+RUN apk update && apk add --no-cache openssl
 
 # Copy package files
 COPY apps/api/package.json ./
