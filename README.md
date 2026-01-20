@@ -14,10 +14,12 @@ Production-ready MVP for on-premise Linux deployment. Integrated with Cisco UCCX
 - **Multi-language UI**: Ukrainian/English interface
 
 ### UCCX Integration (Source of Truth)
+- **High Availability Support**: Automatic failover between UCCX nodes
 - Directory sync: Teams, agents, skills
 - Historical statistics (daily aggregated)
 - Incremental + full sync strategies
-- Automatic retry/backoff
+- Automatic retry/backoff with exponential backoff
+- Round-robin load distribution
 
 ### MediaSense Integration
 - Incremental metadata ingestion
@@ -233,7 +235,13 @@ Automatic syncs:
 - **Incremental**: Every 10 minutes
 - **Stats**: Daily at 3 AM
 
-Retry logic with exponential backoff.
+**High Availability Features:**
+- Automatic failover to secondary UCCX nodes
+- Round-robin load distribution
+- Configurable timeout and retry logic
+- Exponential backoff on failures
+
+See [UCCX_HA_SETUP.md](UCCX_HA_SETUP.md) for HA configuration guide.
 
 ### Sampling Engine
 

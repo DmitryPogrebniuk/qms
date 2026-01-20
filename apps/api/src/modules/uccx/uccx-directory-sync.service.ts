@@ -5,19 +5,54 @@ import { PrismaService } from '@/common/prisma/prisma.service';
 import { Cron } from '@nestjs/schedule';
 import https from 'https';
 
+interface UCCXNode {
+  host: string;
+  port: number;
+  url: string;
+}
+
 /**
  * Syncs teams, agents, skills from UCCX 15 as source of truth
+ * Supports High Availability (HA) with automatic failover
  */
 @Injectable()
 export class UCCXDirectorySyncService {
   private readonly logger = new Logger('UCCXDirectorySyncService');
   private readonly httpsAgent = new https.Agent({ rejectUnauthorized: false }); // For self-signed certs
+  private readonly uccxNodes: UCCXNode[];
+  private currentNodeIndex = 0;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly httpService: HttpService,
     private readonly prisma: PrismaService,
-  ) {}
+  ) {
+    this.uccxNodes = this.parseUCCXNodes();
+    this.logger.log(`Initialized with ${this.uccxNodes.length} UCCX node(s): ${this.uccxNodes.map(n => n.url).join(', ')}`);
+  }
+
+  /**
+   * Parse UCCX_NODES environment variable into node list
+   * Supports formats: host1:port1,host2:port2 or host1,host2 (uses default port 8443)
+   */
+  private parseUCCXNodes(): UCCXNode[] {
+    const nodesConfig = this.configService.get<string>('UCCX_NODES');
+    if (!nodesConfig) {
+      throw new Error('UCCX_NODES configuration is required');
+    }
+
+    return nodesConfig.split(',').map(node => {
+      const trimmed = node.trim();
+      const [host, portStr] = trimmed.includes(':') ? trimmed.split(':') : [trimmed, '8443'];
+      const port = parseInt(portStr, 10);
+      
+      return {
+        host,
+        port,
+        url: `https://${host}:${port}`,
+      };
+    });
+  }
 
   /**
    * Full sync (nightly)
@@ -243,28 +278,60 @@ export class UCCXDirectorySyncService {
   }
 
   /**
-   * Make authenticated request to UCCX
+   * Make authenticated request to UCCX with HA failover
+   * Tries all configured nodes in round-robin fashion with automatic failover
    */
   private async _fetchFromUCCX(endpoint: string): Promise<any[]> {
-    const host = this.configService.get<string>('UCCX_HOST');
-    const port = this.configService.get<number>('UCCX_PORT');
     const username = this.configService.get<string>('UCCX_USERNAME');
     const password = this.configService.get<string>('UCCX_PASSWORD');
+    const timeout = this.configService.get<number>('UCCX_TIMEOUT_MS', 30000);
+    const maxRetries = this.configService.get<number>('UCCX_RETRY_ATTEMPTS', 2);
 
     const auth = Buffer.from(`${username}:${password}`).toString('base64');
 
-    try {
-      const response = await this.httpService.axiosRef.get(`https://${host}:${port}${endpoint}`, {
-        headers: {
-          Authorization: `Basic ${auth}`,
-        },
-        httpsAgent: this.httpsAgent,
-      });
+    // Try all nodes in sequence
+    for (let attempt = 0; attempt < this.uccxNodes.length * maxRetries; attempt++) {
+      const node = this.uccxNodes[this.currentNodeIndex];
+      const url = `${node.url}${endpoint}`;
 
-      return response.data || [];
-    } catch (error) {
-      this.logger.error(`UCCX fetch error for ${endpoint}:`, error);
-      throw error;
+      try {
+        this.logger.debug(`Attempting UCCX request to ${node.url}${endpoint} (attempt ${attempt + 1})`);
+        
+        const response = await this.httpService.axiosRef.get(url, {
+          headers: {
+            Authorization: `Basic ${auth}`,
+          },
+          httpsAgent: this.httpsAgent,
+          timeout,
+        });
+
+        // Success - keep this node for next request
+        this.logger.debug(`Successfully fetched from UCCX node: ${node.host}`);
+        return response.data || [];
+
+      } catch (error) {
+        this.logger.warn(
+          `UCCX node ${node.host} failed for ${endpoint}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        );
+
+        // Try next node
+        this.currentNodeIndex = (this.currentNodeIndex + 1) % this.uccxNodes.length;
+
+        // If this was the last attempt, throw error
+        if (attempt === (this.uccxNodes.length * maxRetries) - 1) {
+          this.logger.error(`All UCCX nodes failed for ${endpoint} after ${attempt + 1} attempts`);
+          throw new Error(`UCCX HA cluster unavailable: All ${this.uccxNodes.length} nodes failed`);
+        }
+
+        // Wait before retry (exponential backoff)
+        await this.sleep(Math.min(1000 * Math.pow(2, attempt), 10000));
+      }
     }
+
+    throw new Error('UCCX request failed');
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 }

@@ -23,12 +23,13 @@ export const configValidationSchema = Joi.object({
   KEYCLOAK_CLIENT_SECRET: Joi.string().required(),
   JWT_SECRET: Joi.string().required(),
 
-  // UCCX
-  UCCX_HOST: Joi.string().required(),
-  UCCX_PORT: Joi.number().default(8443),
+  // UCCX (supports HA with multiple nodes)
+  UCCX_NODES: Joi.string().required().description('Comma-separated UCCX nodes (e.g., uccx1.example.com:8443,uccx2.example.com:8443)'),
   UCCX_USERNAME: Joi.string().required(),
   UCCX_PASSWORD: Joi.string().required(),
   UCCX_SYNC_INTERVAL_SECONDS: Joi.number().default(600),
+  UCCX_TIMEOUT_MS: Joi.number().default(30000),
+  UCCX_RETRY_ATTEMPTS: Joi.number().default(2),
 
   // MediaSense
   MEDIASENSE_HOST: Joi.string().required(),

@@ -51,11 +51,18 @@ ADMIN     ──> Full access + system config
 - **Full Sync** (nightly): Complete refresh of teams, agents, skills
 - **Incremental Sync** (10-min): Only changed records
 - **Fault Tolerance**: System operates if UCCX unavailable
+- **High Availability**: Supports UCCX HA deployments with automatic failover
 
 **Database Design**:
 - Separate `Agent` & `User` tables (agent ≠ user)
 - `agentId` (from AD) is unique key
 - Sync state tracking for each data source
+
+**HA Failover Strategy**:
+- Round-robin load balancing across UCCX nodes
+- Automatic failover on node failure (timeout or error)
+- Exponential backoff retry mechanism
+- Configurable timeout and retry attempts
 
 ### 3. Secure Audio Streaming
 
@@ -267,6 +274,7 @@ Nginx load balancer → Multiple API instances
 PostgreSQL primary + hot standby
 Redis Sentinel for failover
 OpenSearch 3-node cluster
+UCCX HA: Primary + Secondary nodes with automatic failover
 ```
 
 ### Production Multi-Datacenter (Future)
@@ -275,6 +283,7 @@ Geo-distributed Nginx
 PostgreSQL streaming replication across DCs
 OpenSearch with cross-cluster replication
 Redis Cluster for distributed caching
+UCCX HA: Geographically distributed nodes
 ```
 
 ## Known Limitations & Future Work

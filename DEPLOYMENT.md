@@ -86,11 +86,25 @@ Key production settings:
 ```env
 NODE_ENV=production
 KEYCLOAK_ISSUER=https://keycloak.example.com
-UCCX_HOST=uccx.internal.company.com
+
+# UCCX High Availability Configuration
+# Specify multiple nodes separated by commas for automatic failover
+UCCX_NODES=uccx-primary.internal.company.com:8443,uccx-secondary.internal.company.com:8443
+UCCX_USERNAME=admin
+UCCX_PASSWORD=<secure-password>
+UCCX_TIMEOUT_MS=30000
+UCCX_RETRY_ATTEMPTS=2
+
 MEDIASENSE_HOST=mediasense.internal.company.com
 OPENSEARCH_PASSWORD=<strong-password>
 JWT_SECRET=<generate-with-openssl-rand-hex-32>
 ```
+
+**UCCX High Availability Notes:**
+- For single-node deployments, specify one node: `UCCX_NODES=uccx.company.com:8443`
+- For HA deployments, list all nodes: `UCCX_NODES=node1:8443,node2:8443`
+- System automatically fails over to secondary nodes if primary is unavailable
+- Round-robin load distribution with exponential backoff retry
 
 Generate secure JWT secret:
 ```bash
