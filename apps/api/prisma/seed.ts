@@ -207,11 +207,24 @@ async function main() {
     },
   })
 
-  // Create sample evaluation
+  // Create local admin user FIRST (before evaluation that references it)
+  const hashedPassword = await bcrypt.hash('boss', 10)
+  const adminUser = await prisma.user.create({
+    data: {
+      username: 'boss',
+      password: hashedPassword,
+      email: 'boss@localhost',
+      fullName: 'Boss Admin',
+      role: 'ADMIN',
+      isActive: true,
+    },
+  })
+
+  // Create sample evaluation (using the admin user as evaluator)
   await prisma.evaluation.create({
     data: {
       scorecardTemplateId: scorecard.id,
-      evaluatorId: 'qa-keycloak-id',
+      evaluatorId: adminUser.id,
       agentId: agent1.id,
       teamCode: team1.teamCode,
       status: 'SUBMITTED',
@@ -239,19 +252,6 @@ async function main() {
         ESCALATED: 5,
         TRANSFER: 2,
       }),
-    },
-  })
-
-  // Create local admin user
-  const hashedPassword = await bcrypt.hash('boss', 10)
-  await prisma.user.create({
-    data: {
-      username: 'boss',
-      password: hashedPassword,
-      email: 'boss@localhost',
-      fullName: 'Boss Admin',
-      role: 'ADMIN',
-      isActive: true,
     },
   })
 
