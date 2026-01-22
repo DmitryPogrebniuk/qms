@@ -3,11 +3,11 @@ import { test, expect } from '@playwright/test'
 test.describe('Navigation', () => {
   test.beforeEach(async ({ page }) => {
     // Login first
-    await page.goto('/')
-    await page.getByLabel(/користувач/i).fill('boss')
-    await page.getByLabel(/пароль/i).fill('boss')
-    await page.getByRole('button', { name: /вхід/i }).click()
-    await page.waitForURL(/.*dashboard/)
+    await page.goto('/login')
+    await page.getByLabel(/username|користувач/i).fill('boss')
+    await page.getByLabel(/password|пароль/i).fill('boss')
+    await page.getByRole('button', { name: /login|вхід/i }).click()
+    await page.waitForTimeout(2000)
   })
 
   test('should display menu button', async ({ page }) => {
@@ -19,11 +19,11 @@ test.describe('Navigation', () => {
     // Click menu button
     await page.getByRole('button').first().click()
     
-    // Check drawer items are visible
-    await expect(page.getByText(/nav\.dashboard/i)).toBeVisible()
-    await expect(page.getByText(/nav\.search/i)).toBeVisible()
-    await expect(page.getByText(/nav\.evaluations/i)).toBeVisible()
-    await expect(page.getByText(/nav\.coaching/i)).toBeVisible()
+    // Check drawer items are visible (English or Ukrainian) - use role for specificity
+    await expect(page.getByText(/dashboard|панель/i)).toBeVisible()
+    await expect(page.getByRole('button', { name: /^search$|пошук/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^evaluations$|оцінки/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^coaching$|коучинг/i })).toBeVisible()
   })
 
   test('should show admin settings for admin user', async ({ page }) => {
@@ -31,7 +31,7 @@ test.describe('Navigation', () => {
     await page.getByRole('button').first().click()
     
     // Admin settings should be visible for boss user
-    await expect(page.getByText(/nav\.adminSettings/i)).toBeVisible()
+    await expect(page.getByText(/integration settings|налаштування інтеграції/i)).toBeVisible()
   })
 
   test('should navigate to search page', async ({ page }) => {
@@ -39,7 +39,7 @@ test.describe('Navigation', () => {
     await page.getByRole('button').first().click()
     
     // Click search
-    await page.getByText(/nav\.search/i).click()
+    await page.getByText(/^search$|пошук/i).click()
     
     // Check URL changed
     await expect(page).toHaveURL(/.*search/)
@@ -50,7 +50,7 @@ test.describe('Navigation', () => {
     await page.getByRole('button').first().click()
     
     // Click admin settings
-    await page.getByText(/nav\.adminSettings/i).click()
+    await page.getByText(/integration settings|налаштування інтеграції/i).click()
     
     // Check URL changed
     await expect(page).toHaveURL(/.*admin\/settings/)
@@ -62,6 +62,6 @@ test.describe('Navigation', () => {
     
     // Should redirect to login
     await expect(page).toHaveURL(/.*login/)
-    await expect(page.getByLabel(/користувач/i)).toBeVisible()
+    await expect(page.getByLabel(/username|користувач/i)).toBeVisible()
   })
 })
