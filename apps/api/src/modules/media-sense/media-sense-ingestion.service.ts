@@ -108,7 +108,8 @@ export class MediaSenseIngestionService {
 
       return response.data?.recordings || [];
     } catch (error) {
-      this.logger.error('MediaSense fetch error:', error);
+      this.logger.error('MediaSense fetch error:', error);    cat /opt/qms/.env
+      apt-get 
       throw error;
     }
   }
