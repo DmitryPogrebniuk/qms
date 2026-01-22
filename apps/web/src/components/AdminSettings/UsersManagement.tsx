@@ -73,7 +73,7 @@ export default function UsersManagement() {
   const loadUsers = async () => {
     setLoading(true)
     try {
-      const response = await client.get('/api/users')
+      const response = await client.get('/users')
       setUsers(response.data)
     } catch (err: any) {
       setError(err.response?.data?.message || t('users.loadError', 'Failed to load users'))
@@ -84,7 +84,7 @@ export default function UsersManagement() {
 
   const handleAddUser = async () => {
     try {
-      await client.post('/api/users', formData)
+      await client.post('/users', formData)
       setMessage({ type: 'success', text: t('users.created', 'User created successfully') })
       setFormData({ username: '', password: '', email: '', fullName: '', role: 'USER' })
       setOpenDialog(false)
@@ -98,7 +98,7 @@ export default function UsersManagement() {
   const handleEditUser = async () => {
     if (!editingUser) return
     try {
-      await client.put(`/api/users/${editingUser.id}`, editFormData)
+      await client.put(`/users/${editingUser.id}`, editFormData)
       setMessage({ type: 'success', text: t('users.updated', 'User updated successfully') })
       setEditingUser(null)
       setEditFormData({})
@@ -116,7 +116,7 @@ export default function UsersManagement() {
     }
 
     try {
-      await client.delete(`/api/users/${id}`)
+      await client.delete(`/users/${id}`)
       setMessage({ type: 'success', text: t('users.deleted', 'User deleted successfully') })
       loadUsers()
       setTimeout(() => setMessage(null), 5000)
