@@ -37,7 +37,7 @@ export default function Login() {
       localStorage.setItem('jwt_token', response.data.jwt)
 
       // Navigate to dashboard
-      navigate('/dashboard')
+      navigate('/')
     } catch (err: any) {
       const errorMessage = err.response?.data?.message || err.message || t('login.error')
       setError(errorMessage)
