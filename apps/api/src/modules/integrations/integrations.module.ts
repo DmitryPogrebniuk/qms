@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
-import { JwtModule } from '@nestjs/jwt';
 import { IntegrationsService } from './integrations.service';
 import { IntegrationsController } from './integrations.controller';
 import { PrismaModule } from '@/common/prisma/prisma.module';
+import { AuthModule } from '@/modules/auth/auth.module';
 
 @Module({
-  imports: [PrismaModule, JwtModule],
+  imports: [PrismaModule, AuthModule],
   providers: [IntegrationsService],
   controllers: [IntegrationsController],
   exports: [IntegrationsService],
