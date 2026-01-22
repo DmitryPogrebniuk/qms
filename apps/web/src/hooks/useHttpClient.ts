@@ -1,10 +1,13 @@
 import { useMemo } from 'react'
 import axios, { AxiosInstance } from 'axios'
 
+// Use relative URL - nginx/vite will proxy to API
+const API_BASE_URL = import.meta.env.VITE_API_URL || ''
+
 export function useHttpClient(): AxiosInstance {
   return useMemo(() => {
     const client = axios.create({
-      baseURL: 'http://localhost:3000',
+      baseURL: API_BASE_URL || '/api',
       headers: {
         'Content-Type': 'application/json',
       },
