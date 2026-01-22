@@ -4,7 +4,7 @@ import { AuthService } from './auth.service';
 import { Public } from '@/common/decorators/public.decorator';
 
 @ApiTags('Auth')
-@Controller('api/auth')
+@Controller('auth')
 export class AuthController {
   private readonly logger = new Logger('AuthController');
 

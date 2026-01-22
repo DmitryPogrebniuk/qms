@@ -15,6 +15,9 @@ async function bootstrap(): Promise<void> {
   // Security middleware
   app.use(helmet());
 
+  // Global API prefix
+  app.setGlobalPrefix('api');
+
   // CORS
   app.enableCors({
     origin: process.env.CORS_ORIGIN?.split(',') || '*',

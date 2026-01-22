@@ -9,7 +9,7 @@ import { Public } from '@/common/decorators/public.decorator';
 
 @ApiTags('Integrations')
 @ApiBearerAuth()
-@Controller('api/integrations')
+@Controller('integrations')
 @UseGuards(JwtAuthGuard, RbacGuard)
 export class IntegrationsController {
   constructor(private integrationsService: IntegrationsService) {}

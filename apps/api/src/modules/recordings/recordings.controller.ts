@@ -15,7 +15,7 @@ import { SearchRequest } from '@/types/shared';
 
 @ApiTags('Recordings')
 @ApiBearerAuth()
-@Controller('api/recordings')
+@Controller('recordings')
 export class RecordingsController {
   private readonly logger = new Logger('RecordingsController');
 

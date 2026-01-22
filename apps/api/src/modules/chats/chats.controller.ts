@@ -5,7 +5,7 @@ import { SearchRequest } from '@/types/shared';
 
 @ApiTags('Chats')
 @ApiBearerAuth()
-@Controller('api/chats')
+@Controller('chats')
 export class ChatsController {
   constructor(private readonly chatsService: ChatsService) {}
 

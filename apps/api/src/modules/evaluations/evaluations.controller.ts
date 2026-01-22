@@ -6,7 +6,7 @@ import { Role } from '@/types/shared';
 
 @ApiTags('Evaluations')
 @ApiBearerAuth()
-@Controller('api/evaluations')
+@Controller('evaluations')
 export class EvaluationsController {
   constructor(private readonly evaluationsService: EvaluationsService) {}
 

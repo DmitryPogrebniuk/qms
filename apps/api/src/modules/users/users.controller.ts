@@ -6,7 +6,7 @@ import { Role } from '@/types/shared';
 
 @ApiTags('Users')
 @ApiBearerAuth()
-@Controller('api/users')
+@Controller('users')
 export class UsersController {
   private readonly logger = new Logger('UsersController');
 
