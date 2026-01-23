@@ -3,7 +3,7 @@
  * Full-featured search interface with filters, results table, and details drawer
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -14,7 +14,6 @@ import {
   LinearProgress,
   Paper,
   Toolbar,
-  Button,
   Menu,
   MenuItem,
   Badge,
@@ -24,9 +23,7 @@ import {
   Refresh as RefreshIcon,
   Download as DownloadIcon,
   FilterList as FilterIcon,
-  ViewColumn as ColumnsIcon,
   MoreVert as MoreIcon,
-  Assessment as StatsIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import {
