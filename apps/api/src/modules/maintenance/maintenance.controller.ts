@@ -17,6 +17,7 @@ import { Response } from 'express';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { Role } from '@/types/shared';
 import { MaintenanceService, LogFilter } from './maintenance.service';
 import * as fs from 'fs';
 
@@ -69,7 +70,7 @@ export class MaintenanceController {
   // ============================================
 
   @Get('overview')
-  @Roles('Admin', 'Supervisor')
+  @Roles(Role.ADMIN, Role.SUPERVISOR)
   async getSystemOverview() {
     return this.maintenanceService.getSystemOverview();
   }
@@ -79,25 +80,25 @@ export class MaintenanceController {
   // ============================================
 
   @Get('components')
-  @Roles('Admin', 'Supervisor')
+  @Roles(Role.ADMIN, Role.SUPERVISOR)
   async getAllComponents(@Query('includeDisabled') includeDisabled?: string) {
     return this.maintenanceService.getAllComponents(includeDisabled === 'true');
   }
 
   @Get('components/:id')
-  @Roles('Admin', 'Supervisor')
+  @Roles(Role.ADMIN, Role.SUPERVISOR)
   async getComponentById(@Param('id') id: string) {
     return this.maintenanceService.getComponentById(id);
   }
 
   @Get('components/code/:code')
-  @Roles('Admin', 'Supervisor')
+  @Roles(Role.ADMIN, Role.SUPERVISOR)
   async getComponentByCode(@Param('code') code: string) {
     return this.maintenanceService.getComponentByCode(code);
   }
 
   @Post('components/:id/restart')
-  @Roles('Admin')
+  @Roles(Role.ADMIN)
   @HttpCode(HttpStatus.OK)
   async restartComponent(
     @Param('id') id: string,
@@ -118,7 +119,7 @@ export class MaintenanceController {
   // ============================================
 
   @Post('components/:id/health/run')
-  @Roles('Admin', 'Supervisor')
+  @Roles(Role.ADMIN, Role.SUPERVISOR)
   @HttpCode(HttpStatus.OK)
   async runHealthCheck(
     @Param('id') id: string,
@@ -132,7 +133,7 @@ export class MaintenanceController {
   // ============================================
 
   @Get('components/:code/logs')
-  @Roles('Admin', 'Supervisor')
+  @Roles(Role.ADMIN, Role.SUPERVISOR)
   async getComponentLogs(
     @Param('code') code: string,
     @Query() query: GetLogsDto,
@@ -154,13 +155,13 @@ export class MaintenanceController {
   // ============================================
 
   @Get('alerts')
-  @Roles('Admin', 'Supervisor')
+  @Roles(Role.ADMIN, Role.SUPERVISOR)
   async getActiveAlerts(@Query('componentCode') componentCode?: string) {
     return this.maintenanceService.getActiveAlerts(componentCode);
   }
 
   @Patch('alerts/:id/acknowledge')
-  @Roles('Admin', 'Supervisor')
+  @Roles(Role.ADMIN, Role.SUPERVISOR)
   @HttpCode(HttpStatus.OK)
   async acknowledgeAlert(
     @Param('id') id: string,
@@ -172,7 +173,7 @@ export class MaintenanceController {
   }
 
   @Patch('alerts/:id/resolve')
-  @Roles('Admin')
+  @Roles(Role.ADMIN)
   @HttpCode(HttpStatus.OK)
   async resolveAlert(@Param('id') id: string) {
     return this.maintenanceService.resolveAlert(id);
@@ -183,7 +184,7 @@ export class MaintenanceController {
   // ============================================
 
   @Get('actions')
-  @Roles('Admin', 'Supervisor')
+  @Roles(Role.ADMIN, Role.SUPERVISOR)
   async getActionHistory(@Query() query: GetActionsDto) {
     return this.maintenanceService.getActionHistory({
       componentId: query.componentId,
@@ -201,7 +202,7 @@ export class MaintenanceController {
   // ============================================
 
   @Post('diagnostics')
-  @Roles('Admin')
+  @Roles(Role.ADMIN)
   @HttpCode(HttpStatus.OK)
   async generateDiagnosticsBundle(@Body() dto: GenerateDiagnosticsDto) {
     return this.maintenanceService.generateDiagnosticsBundle(
@@ -215,7 +216,7 @@ export class MaintenanceController {
   }
 
   @Get('diagnostics/:filename')
-  @Roles('Admin')
+  @Roles(Role.ADMIN)
   async downloadDiagnosticsBundle(
     @Param('filename') filename: string,
     @Res({ passthrough: true }) res: Response,
