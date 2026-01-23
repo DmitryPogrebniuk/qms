@@ -23,7 +23,8 @@ import { RecordingsSearchService, SearchRequest, AccessControl } from './recordi
 import { RecordingsStreamService } from './recordings-stream.service';
 import { ExportService } from './export.service';
 import { Roles } from '@/common/decorators/roles.decorator';
-import { Role } from '@prisma/client';
+// import { Role } from '@prisma/client';
+import { Role } from '@/types/shared';
 
 @ApiTags('Recordings')
 @ApiBearerAuth()
