@@ -58,7 +58,7 @@ export interface LogResult {
 }
 
 export interface HealthCheckResult {
-  status: 'OK' | 'WARNING' | 'CRITICAL' | 'UNKNOWN';
+  status: 'OK' | 'WARNING' | 'CRITICAL' | 'UNKNOWN' | 'SKIPPED';
   value?: number;
   message: string;
   duration: number;
