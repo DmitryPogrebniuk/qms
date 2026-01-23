@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Box,
   Container,
   Typography,
   Paper,
-  Grid,
+  Grid2 as Grid,
   Chip,
   Card,
   CardContent,
@@ -39,7 +39,6 @@ import {
   Select,
   MenuItem,
   InputAdornment,
-  Collapse,
   Divider,
   LinearProgress,
 } from '@mui/material';
@@ -54,10 +53,6 @@ import {
   HelpOutline as UnknownIcon,
   RestartAlt as RestartAltIcon,
   Search as SearchIcon,
-  FilterList as FilterIcon,
-  Download as DownloadIcon,
-  ExpandMore as ExpandIcon,
-  ExpandLess as CollapseIcon,
   NotificationsActive as AlertIcon,
   History as HistoryIcon,
   BugReport as DiagnosticsIcon,
@@ -263,7 +258,6 @@ export default function Maintenance() {
 
   // Component detail
   const [selectedComponent, setSelectedComponent] = useState<SystemComponent | null>(null);
-  const [componentDetailOpen, setComponentDetailOpen] = useState(false);
   const [componentLogs, setComponentLogs] = useState<LogEntry[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
 
@@ -285,15 +279,15 @@ export default function Maintenance() {
     setLoading(true);
     try {
       const [overviewRes, componentsRes, alertsRes, actionsRes] = await Promise.all([
-        http.get('/maintenance/overview'),
-        http.get('/maintenance/components'),
-        http.get('/maintenance/alerts'),
-        http.get('/maintenance/actions?limit=20'),
+        http.get<SystemOverview>('/maintenance/overview'),
+        http.get<SystemComponent[]>('/maintenance/components'),
+        http.get<MaintenanceAlert[]>('/maintenance/alerts'),
+        http.get<{ items: MaintenanceAction[] }>('/maintenance/actions?limit=20'),
       ]);
-      setOverview(overviewRes);
-      setComponents(componentsRes);
-      setAlerts(alertsRes);
-      setActions(actionsRes.items || []);
+      setOverview(overviewRes.data);
+      setComponents(componentsRes.data);
+      setAlerts(alertsRes.data);
+      setActions(actionsRes.data.items || []);
     } catch (error) {
       console.error('Failed to fetch maintenance data:', error);
     } finally {
@@ -321,8 +315,8 @@ export default function Maintenance() {
       }
       params.append('limit', '200');
 
-      const res = await http.get(`/maintenance/components/${code}/logs?${params.toString()}`);
-      setComponentLogs(res.entries || []);
+      const res = await http.get<{ entries: LogEntry[] }>(`/maintenance/components/${code}/logs?${params.toString()}`);
+      setComponentLogs(res.data.entries || []);
     } catch (error) {
       console.error('Failed to fetch logs:', error);
       setComponentLogs([]);
@@ -385,13 +379,13 @@ export default function Maintenance() {
   // Handle download diagnostics
   const handleDownloadDiagnostics = async () => {
     try {
-      const result = await http.post('/maintenance/diagnostics', {
+      const result = await http.post<{ filename: string }>('/maintenance/diagnostics', {
         componentCodes: [],
         includeLogs: true,
         includeMetrics: true,
       });
       // Download the file
-      window.open(`/api/maintenance/diagnostics/${result.filename}`, '_blank');
+      window.open(`/api/maintenance/diagnostics/${result.data.filename}`, '_blank');
     } catch (error) {
       console.error('Failed to generate diagnostics:', error);
     }
