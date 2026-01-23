@@ -28,7 +28,8 @@
     "evaluations": "Evaluations",
     "coaching": "Coaching",
     "admin": "Administration",
-    "adminSettings": "Integration Settings"
+    "adminSettings": "Integration Settings",
+    "maintenance": "🔧 Maintenance"
   },
   "ciscoNav": {
     "home": "Home",
@@ -287,5 +288,57 @@
     "loadMore": "Load More",
     "clearLogsConfirmTitle": "Clear Logs?",
     "clearLogsConfirmText": "Are you sure you want to clear all MediaSense integration logs? This action cannot be undone."
+  },
+  "maintenance": {
+    "title": "System Maintenance",
+    "systemHealth": "System Health",
+    "healthy": "Healthy",
+    "degraded": "Degraded",
+    "critical": "Critical",
+    "components": "Components",
+    "activeAlerts": "Active Alerts",
+    "noAlerts": "No Alerts",
+    "lastUpdated": "Last Updated",
+    "diagnostics": "Diagnostics",
+    "tabs": {
+      "components": "Components",
+      "alerts": "Alerts",
+      "history": "Action History"
+    },
+    "table": {
+      "component": "Component",
+      "status": "Status",
+      "healthChecks": "Health Checks",
+      "metrics": "Metrics",
+      "lastHeartbeat": "Last Heartbeat",
+      "actions": "Actions"
+    },
+    "runHealthCheck": "Run Health Check",
+    "viewLogs": "View Logs",
+    "restart": "Restart",
+    "noActiveAlerts": "No Active Alerts",
+    "allSystemsNormal": "All systems are operating normally.",
+    "acknowledge": "Acknowledge",
+    "acknowledged": "Acknowledged",
+    "noActions": "No action history",
+    "history": {
+      "when": "When",
+      "component": "Component",
+      "action": "Action",
+      "actor": "Actor",
+      "reason": "Reason",
+      "status": "Status"
+    },
+    "restartDialog": {
+      "title": "Confirm Restart",
+      "message": "Are you sure you want to restart component",
+      "reason": "Reason (optional)"
+    },
+    "logs": {
+      "title": "Logs",
+      "search": "Search...",
+      "level": "Level",
+      "noLogs": "No logs to display"
+    }
   }
 }

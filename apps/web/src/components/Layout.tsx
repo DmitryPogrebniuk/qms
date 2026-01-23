@@ -41,6 +41,7 @@ export default function Layout() {
 
   const adminItems = userRole === 'ADMIN' ? [
     { label: t('nav.adminSettings'), path: '/admin/settings' },
+    { label: t('nav.maintenance', '🔧 Обслуговування'), path: '/admin/maintenance' },
   ] : []
 
   const handleLogout = () => {

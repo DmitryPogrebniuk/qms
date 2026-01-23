@@ -830,3 +830,273 @@ model SystemSetting {
   @@index([category])
 }
 
+// ============================================================================
+// MAINTENANCE & SYSTEM HEALTH
+// ============================================================================
+
+// System Component Registry
+model SystemComponent {
+  id            String   @id @default(cuid())
+  code          String   @unique @db.VarChar(50) // 'api', 'web', 'db', 'opensearch', 'mediasense', etc.
+  name          String   @db.VarChar(100)        // Human-readable name
+  description   String?
+  componentType ComponentType
+  
+  // Status tracking
+  status        ComponentStatus @default(UNKNOWN)
+  statusReason  String?          // Why degraded/down
+  lastHeartbeat DateTime?        @db.Timestamptz()
+  lastHealthCheck DateTime?      @db.Timestamptz()
+  
+  // Version/deployment info
+  version       String?   @db.VarChar(50)
+  buildId       String?   @db.VarChar(100)
+  startedAt     DateTime? @db.Timestamptz()       // For uptime calculation
+  
+  // Metrics (latest snapshot)
+  metrics       Json?     // { cpuPercent, memoryMB, errorRate, avgResponseMs, queueSize, etc. }
+  
+  // Configuration
+  isCritical    Boolean   @default(false)          // Requires extra confirmation for restart
+  isRestartable Boolean   @default(true)           // Can be restarted via UI
+  restartMethod RestartMethod @default(DOCKER)
+  restartConfig Json?     // { containerName, serviceName, deploymentName, etc. }
+  
+  // Dependencies (for cascade status)
+  dependsOn     String[]  @default([])             // Array of component codes
+  
+  // Health check configuration
+  healthChecks  HealthCheck[]
+  
+  // Order for display
+  displayOrder  Int       @default(0)
+  isEnabled     Boolean   @default(true)
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  actions       MaintenanceAction[]
+  alerts        MaintenanceAlert[]
+  
+  @@index([code])
+  @@index([status])
+  @@index([componentType])
+}
+
+enum ComponentType {
+  FRONTEND      // Web UI
+  BACKEND       // API services
+  DATABASE      // PostgreSQL, Redis
+  SEARCH        // OpenSearch
+  INTEGRATION   // External APIs (MediaSense, UCCX, Keycloak)
+  WORKER        // Background jobs, schedulers
+  INFRASTRUCTURE // Message brokers, caches
+}
+
+enum ComponentStatus {
+  OK        // All checks green
+  DEGRADED  // Partial failures, high latency
+  DOWN      // Not responding
+  UNKNOWN   // Not yet checked
+  RESTARTING // Currently restarting
+}
+
+enum RestartMethod {
+  DOCKER     // docker restart <container>
+  KUBERNETES // kubectl rollout restart
+  SYSTEMD    // systemctl restart
+  INTERNAL   // In-process worker restart
+  NONE       // Cannot be restarted
+}
+
+// Health Check definitions
+model HealthCheck {
+  id            String   @id @default(cuid())
+  componentId   String
+  
+  name          String   @db.VarChar(100)         // 'db_connection', 'api_latency', etc.
+  description   String?
+  checkType     HealthCheckType
+  
+  // Check configuration
+  config        Json?    // { url, query, threshold, etc. }
+  
+  // Thresholds
+  warningThreshold  Float?   // Value above which status becomes DEGRADED
+  criticalThreshold Float?   // Value above which status becomes DOWN
+  
+  // Last result
+  lastStatus    HealthCheckStatus @default(UNKNOWN)
+  lastValue     Float?            // Measured value
+  lastMessage   String?           // Human-readable result
+  lastCheckedAt DateTime?         @db.Timestamptz()
+  
+  // Timing
+  intervalSeconds Int     @default(60)            // How often to run
+  timeoutSeconds  Int     @default(10)            // Max time for check
+  
+  isEnabled     Boolean  @default(true)
+  isCritical    Boolean  @default(true)           // Affects component status
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  component     SystemComponent @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  
+  @@index([componentId])
+  @@index([lastStatus])
+}
+
+enum HealthCheckType {
+  HTTP_PING       // GET request, check status code
+  TCP_CONNECT     // TCP connection check
+  DB_QUERY        // Execute query, measure time
+  METRIC_CHECK    // Check metric value
+  QUEUE_LAG       // Check queue backlog
+  DISK_SPACE      // Check available disk
+  MEMORY_USAGE    // Check memory
+  CUSTOM          // Custom script/check
+}
+
+enum HealthCheckStatus {
+  OK
+  WARNING
+  CRITICAL
+  UNKNOWN
+  SKIPPED
+}
+
+// Maintenance Actions audit log
+model MaintenanceAction {
+  id            String   @id @default(cuid())
+  componentId   String
+  
+  actionType    MaintenanceActionType
+  status        ActionStatus @default(PENDING)
+  
+  // Who and why
+  actorId       String                // User ID who initiated
+  actorName     String?  @db.VarChar(100)
+  reason        String?               // Required for restarts
+  
+  // Timing
+  requestedAt   DateTime @default(now()) @db.Timestamptz()
+  startedAt     DateTime? @db.Timestamptz()
+  finishedAt    DateTime? @db.Timestamptz()
+  
+  // Result
+  resultMessage String?
+  resultDetails Json?
+  
+  // For async jobs
+  jobId         String?  @unique @db.VarChar(100)
+  progress      Int?     // 0-100 percent
+  
+  createdAt     DateTime @default(now())
+  
+  component     SystemComponent @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  
+  @@index([componentId])
+  @@index([actorId])
+  @@index([requestedAt])
+  @@index([status])
+}
+
+enum MaintenanceActionType {
+  RESTART
+  CLEAR_CACHE
+  CLEAR_LOGS
+  REINDEX
+  RUN_HEALTH_CHECK
+  TRIGGER_SYNC
+  ROTATE_LOGS
+  DIAGNOSTICS_BUNDLE
+}
+
+enum ActionStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+// Maintenance Alerts
+model MaintenanceAlert {
+  id            String   @id @default(cuid())
+  componentId   String?
+  
+  alertType     AlertType
+  severity      AlertSeverity
+  
+  title         String   @db.VarChar(200)
+  message       String
+  
+  // State
+  isActive      Boolean  @default(true)
+  isAcknowledged Boolean @default(false)
+  acknowledgedBy String?
+  acknowledgedAt DateTime? @db.Timestamptz()
+  
+  // Notification tracking
+  notificationsSent Json? // { email: [...], ui: [...] }
+  
+  triggeredAt   DateTime @default(now()) @db.Timestamptz()
+  resolvedAt    DateTime? @db.Timestamptz()
+  
+  createdAt     DateTime @default(now())
+  
+  component     SystemComponent? @relation(fields: [componentId], references: [id], onDelete: SetNull)
+  
+  @@index([componentId])
+  @@index([isActive])
+  @@index([severity])
+  @@index([triggeredAt])
+}
+
+enum AlertType {
+  COMPONENT_DOWN
+  COMPONENT_DEGRADED
+  HIGH_ERROR_RATE
+  HIGH_LATENCY
+  QUEUE_BACKLOG
+  DISK_SPACE_LOW
+  MEMORY_HIGH
+  SYNC_FAILED
+  HEALTH_CHECK_FAILED
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  ERROR
+  CRITICAL
+}
+
+// Alert notification settings
+model AlertNotificationSetting {
+  id            String   @id @default(cuid())
+  
+  alertType     AlertType?           // null = all types
+  severity      AlertSeverity?       // null = all severities
+  componentCode String?  @db.VarChar(50) // null = all components
+  
+  // Notification channels
+  notifyEmail   Boolean  @default(false)
+  emailRecipients String[] @default([])
+  
+  notifyUI      Boolean  @default(true)
+  
+  // Thresholds
+  cooldownMinutes Int    @default(15)  // Don't repeat same alert
+  
+  isEnabled     Boolean  @default(true)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([alertType])
+  @@index([severity])
+}
+
