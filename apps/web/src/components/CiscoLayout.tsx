@@ -156,7 +156,7 @@ export default function CiscoLayout() {
           zIndex: 1200,
         }}
       >
-        {/* Cisco Logo */}
+        {/* QMS Logo */}
         <Box sx={{ 
           padding: '16px 8px 24px',
           display: 'flex',
@@ -167,21 +167,11 @@ export default function CiscoLayout() {
             sx={{ 
               color: '#049FD9', 
               fontWeight: 'bold', 
-              fontSize: '14px',
+              fontSize: '18px',
               letterSpacing: '1px'
             }}
           >
-            ahah
-          </Typography>
-          <Typography 
-            sx={{ 
-              color: '#049FD9', 
-              fontWeight: 'bold', 
-              fontSize: '11px',
-              letterSpacing: '2px'
-            }}
-          >
-            CISCO
+            QMS
           </Typography>
         </Box>
 
@@ -227,7 +217,7 @@ export default function CiscoLayout() {
               fontSize: '16px'
             }}
           >
-            Cisco Unified Intelligence Center
+            Quality Management Solution
           </Typography>
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -310,7 +300,7 @@ export default function CiscoLayout() {
           }}
         >
           <Typography variant="caption" sx={{ color: '#757575' }}>
-            Copyright © 2010 - 2026 Cisco Systems, Inc. All rights reserved.
+            Quality Management Solution © 2026
           </Typography>
         </Box>
       </Box>

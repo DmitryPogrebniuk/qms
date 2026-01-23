@@ -31,6 +31,9 @@
     "schedules": "Schedules",
     "interactiveHelp": "Interactive Help"
   },
+  "qms": {
+    "tagline": "Comprehensive quality monitoring and evaluation platform"
+  },
   "dashboard": {
     "title": "Quality Management System",
     "welcome": "Welcome to QMS",

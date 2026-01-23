@@ -22,7 +22,7 @@ export default function Dashboard() {
               mb: 2
             }}
           >
-            Cisco Unified Intelligence Center
+            Quality Management Solution
           </Typography>
           <Typography 
             variant="body1" 
@@ -31,13 +31,7 @@ export default function Dashboard() {
               mb: 1
             }}
           >
-            {t('ciscoNav.reportDashboards', 'Expand the boundaries of traditional call center reporting capabilities')}
-          </Typography>
-          <Typography 
-            variant="caption" 
-            sx={{ color: '#999999' }}
-          >
-            Version 15.0(1) Build 15.0.1.10000.27
+            {t('qms.tagline', 'Comprehensive quality monitoring and evaluation platform')}
           </Typography>
         </Box>
 
