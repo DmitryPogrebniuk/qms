@@ -168,5 +168,25 @@
     "keycloakClientId": "Client ID",
     "keycloakClientSecret": "Client Secret",
     "keycloakNote": "Changing Keycloak settings requires application restart"
+  },
+  "mediaSense": {
+    "testConnection": "Test Connection",
+    "testFailed": "Connection test failed",
+    "checkConnection": "Check MediaSense API URL and credentials",
+    "recommendations": "Recommendations:",
+    "urlHelp": "Default port: 8440",
+    "apiKeyHelp": "Username for MediaSense API",
+    "apiSecretHelp": "Password for MediaSense API",
+    "allowSelfSigned": "Allow self-signed certificates (testing only)",
+    "logsTitle": "MediaSense Integration Logs",
+    "logLevel": "Log Level",
+    "autoRefresh": "Auto-refresh",
+    "refreshLogs": "Refresh logs",
+    "clearLogs": "Clear logs",
+    "entries": "entries",
+    "noLogs": "No logs available",
+    "loadMore": "Load More",
+    "clearLogsConfirmTitle": "Clear Logs?",
+    "clearLogsConfirmText": "Are you sure you want to clear all MediaSense integration logs? This action cannot be undone."
   }
 }

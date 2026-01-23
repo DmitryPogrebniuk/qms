@@ -168,5 +168,25 @@
     "keycloakClientId": "ID клієнта",
     "keycloakClientSecret": "Секрет клієнта",
     "keycloakNote": "Зміна параметрів Keycloak вимагає перезавантаження програми"
+  },
+  "mediaSense": {
+    "testConnection": "Тест з'єднання",
+    "testFailed": "Тест з'єднання не вдався",
+    "checkConnection": "Перевірте URL API MediaSense та облікові дані",
+    "recommendations": "Рекомендації:",
+    "urlHelp": "Порт за замовчуванням: 8440",
+    "apiKeyHelp": "Ім'я користувача для API MediaSense",
+    "apiSecretHelp": "Пароль для API MediaSense",
+    "allowSelfSigned": "Дозволити самопідписані сертифікати (тільки для тестування)",
+    "logsTitle": "Журнали інтеграції MediaSense",
+    "logLevel": "Рівень журналу",
+    "autoRefresh": "Автооновлення",
+    "refreshLogs": "Оновити журнали",
+    "clearLogs": "Очистити журнали",
+    "entries": "записів",
+    "noLogs": "Журнали недоступні",
+    "loadMore": "Завантажити ще",
+    "clearLogsConfirmTitle": "Очистити журнали?",
+    "clearLogsConfirmText": "Ви впевнені, що хочете очистити всі журнали інтеграції MediaSense? Цю дію неможливо скасувати."
   }
 }
