@@ -124,10 +124,11 @@ export class MediaSenseIngestionService {
           endTime: new Date(recording.endTime),
           durationSeconds: recording.duration,
           isArchived: recording.archived,
-          rawJson: recording,
+          rawMetadata: recording,
           updatedAt: new Date(),
         },
         create: {
+          mediasenseSessionId: recording.sessionId || recording.mediasenseSessionId || '',
           mediasenseRecordingId: recording.recordingId,
           agentId: recording.agentId || 'UNKNOWN',
           teamCode: recording.teamCode || 'UNKNOWN',
@@ -143,7 +144,7 @@ export class MediaSenseIngestionService {
           transferCount: recording.transferCount,
           holdTimeSeconds: recording.holdTime,
           isArchived: recording.archived,
-          rawJson: recording,
+          rawMetadata: recording,
         },
       });
     } catch (error) {
