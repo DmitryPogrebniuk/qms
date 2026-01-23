@@ -10,6 +10,7 @@ import { MediaSenseLogger } from './media-sense-logger.service';
 import { MediaSenseSyncService } from './media-sense-sync.service';
 import { MediaSenseIntegrationController } from './media-sense-integration.controller';
 import { OpenSearchModule } from '../opensearch/opensearch.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { OpenSearchModule } from '../opensearch/opensearch.module';
     PrismaModule,
     ScheduleModule.forRoot(),
     OpenSearchModule,
+    AuthModule,
   ],
   controllers: [MediaSenseIntegrationController],
   providers: [
