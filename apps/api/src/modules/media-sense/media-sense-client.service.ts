@@ -441,7 +441,7 @@ export class MediaSenseClientService {
         success: false,
         message: 'Invalid MediaSense URL',
         details,
-        recommendations: ['Check URL format: https://mediasense.example.com:8440'],
+        recommendations: ['Check URL format: https://192.168.200.133:8440'],
       };
     }
 

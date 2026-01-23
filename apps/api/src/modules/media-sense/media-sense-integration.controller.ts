@@ -62,7 +62,7 @@ export class MediaSenseIntegrationController {
       return {
         success: false,
         message: 'API URL is required',
-        recommendations: ['Provide MediaSense API URL (e.g., https://mediasense.example.com:8440)'],
+        recommendations: ['Provide MediaSense API URL (e.g., https://192.168.200.133:8440)'],
       };
     }
 
