@@ -782,3 +782,51 @@ enum SyncStatus {
   FAILED
   PARTIAL // Some records synced but with errors
 }
+
+// ============================================================================
+// INTEGRATION SETTINGS (Persistent Configuration)
+// ============================================================================
+
+model IntegrationSetting {
+  id            String   @id @default(cuid())
+  integrationType String  @unique @db.VarChar(50) // 'uccx', 'mediasense', 'opensearch', 'email', 'keycloak'
+  
+  // Encrypted settings stored as JSON
+  settings      Json     @default("{}")
+  
+  // Sensitive fields stored separately (encrypted at application level)
+  encryptedCredentials String? @db.Text
+  
+  isEnabled     Boolean  @default(false)
+  isConfigured  Boolean  @default(false)
+  
+  // Connection status
+  lastTestAt    DateTime? @db.Timestamptz()
+  lastTestSuccess Boolean?
+  lastTestError String?
+  
+  // Metadata
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  createdBy     String?
+  updatedBy     String?
+  
+  @@index([integrationType])
+  @@index([isEnabled])
+}
+
+// System-wide settings (key-value store)
+model SystemSetting {
+  id    String @id @default(cuid())
+  key   String @unique @db.VarChar(100)
+  value Json
+  
+  description String?
+  category    String? @db.VarChar(50)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([category])
+}
+

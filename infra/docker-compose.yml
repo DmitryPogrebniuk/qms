@@ -108,6 +108,7 @@ services:
       OPENSEARCH_PORT: 9200
       OPENSEARCH_USERNAME: admin
       OPENSEARCH_PASSWORD: SecurePassword123!
+      EXPORT_DIR: /app/exports
       CORS_ORIGIN: http://localhost:5173,http://localhost:3000
       LOG_LEVEL: debug
     ports:
@@ -120,6 +121,7 @@ services:
     volumes:
       - ../apps/api/src:/app/apps/api/src
       - ../packages/shared/src:/app/packages/shared/src
+      - api_exports:/app/exports  # Persistent storage for audio exports
     networks:
       - qms_network
 
@@ -158,6 +160,7 @@ volumes:
   postgres_data:
   redis_data:
   opensearch_data:
+  api_exports:  # Persistent storage for audio exports
 
 networks:
   qms_network:
