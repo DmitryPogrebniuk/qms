@@ -47,7 +47,48 @@ export class MediaSenseIntegrationController {
   constructor(
     private readonly mediaSenseClient: MediaSenseClientService,
     private readonly logger: MediaSenseLogger,
+    private readonly prisma: any, // Use correct PrismaService import in real code
   ) {}
+  /**
+   * Save MediaSense config
+   */
+  @Put()
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Save MediaSense integration config' })
+  @Roles(Role.ADMIN)
+  async saveConfig(@Body() config: MediaSenseConfigDto): Promise<{ success: boolean; message: string }> {
+    // Validate input
+    if (!config.apiUrl || !config.apiKey || !config.apiSecret) {
+      throw new BadRequestException('Missing required MediaSense config fields');
+    }
+
+    // Upsert settings in IntegrationSetting
+    await this.prisma.integrationSetting.upsert({
+      where: { integrationType: 'mediasense' },
+      update: {
+        settings: {
+          apiUrl: config.apiUrl,
+          apiKey: config.apiKey,
+          apiSecret: config.apiSecret,
+          allowSelfSigned: config.allowSelfSigned ?? false,
+        },
+        isEnabled: true,
+        isConfigured: true,
+      },
+      create: {
+        integrationType: 'mediasense',
+        settings: {
+          apiUrl: config.apiUrl,
+          apiKey: config.apiKey,
+          apiSecret: config.apiSecret,
+          allowSelfSigned: config.allowSelfSigned ?? false,
+        },
+        isEnabled: true,
+        isConfigured: true,
+      },
+    });
+    return { success: true, message: 'MediaSense config saved' };
+  }
 
   /**
    * Test MediaSense connection

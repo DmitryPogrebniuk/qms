@@ -834,34 +834,36 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
 
   private async getMediaSenseConfig(): Promise<{ enabled: boolean; apiUrl?: string } | null> {
     try {
-      // Get from integration settings in DB or config
-      const apiUrl = this.configService.get<string>('MEDIASENSE_API_URL');
-      const apiKey = this.configService.get<string>('MEDIASENSE_API_KEY');
-      
+      // Get from IntegrationSetting in DB
+      const setting = await this.prisma.integrationSetting.findUnique({
+        where: { integrationType: 'mediasense' },
+      });
+      if (!setting || !setting.isEnabled || !setting.settings) {
+        return { enabled: false };
+      }
+      const { apiUrl, apiKey, apiSecret, allowSelfSigned } = setting.settings as any;
       return {
-        enabled: Boolean(apiUrl && apiKey),
+        enabled: Boolean(apiUrl && apiKey && apiSecret),
         apiUrl,
+        apiKey,
+        apiSecret,
+        allowSelfSigned,
       };
     } catch {
-      return null;
+      return { enabled: false };
     }
   }
 
   private async configureClient(): Promise<void> {
-    const apiUrl = this.configService.get<string>('MEDIASENSE_API_URL');
-    const apiKey = this.configService.get<string>('MEDIASENSE_API_KEY');
-    const apiSecret = this.configService.get<string>('MEDIASENSE_API_SECRET');
-    const allowSelfSigned = this.configService.get<boolean>('MEDIASENSE_ALLOW_SELF_SIGNED');
-
-    if (!apiUrl || !apiKey || !apiSecret) {
+    const config = await this.getMediaSenseConfig();
+    if (!config?.enabled) {
       throw new Error('MediaSense not configured');
     }
-
     this.mediaSenseClient.configure({
-      baseUrl: apiUrl,
-      apiKey,
-      apiSecret,
-      allowSelfSigned,
+      baseUrl: config.apiUrl,
+      apiKey: config.apiKey,
+      apiSecret: config.apiSecret,
+      allowSelfSigned: config.allowSelfSigned,
     });
   }
 
