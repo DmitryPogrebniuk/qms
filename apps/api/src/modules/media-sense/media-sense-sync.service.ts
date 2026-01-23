@@ -832,7 +832,13 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
   // Helper methods
   // ============================================================================
 
-  private async getMediaSenseConfig(): Promise<{ enabled: boolean; apiUrl?: string } | null> {
+  private async getMediaSenseConfig(): Promise<{
+    enabled: boolean;
+    apiUrl?: string;
+    apiKey?: string;
+    apiSecret?: string;
+    allowSelfSigned?: boolean;
+  }> {
     try {
       // Get from IntegrationSetting in DB
       const setting = await this.prisma.integrationSetting.findUnique({
