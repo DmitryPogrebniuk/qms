@@ -721,10 +721,8 @@ export class MediaSenseClientService {
     for (const endpoint of mediaEndpoints) {
       try {
         // Just get the URL/info, don't download
-        const response = await this.request('GET', endpoint, undefined, {
-          validateStatus: () => true,
-          maxRedirects: 0,
-        });
+          // validateStatus is not a valid option for this.request, so we remove it
+          const response = await this.request('GET', endpoint, undefined);
 
         if (response.success && response.data?.url) {
           return {
