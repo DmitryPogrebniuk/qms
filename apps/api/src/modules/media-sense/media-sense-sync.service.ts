@@ -915,7 +915,7 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
       where: { syncType: this.SYNC_TYPE },
       data: {
         status,
-        checkpoint: checkpoint || undefined,
+        checkpoint: checkpoint ? JSON.parse(JSON.stringify(checkpoint)) : undefined,
         watermarkTime: checkpoint?.lastSyncTime ? new Date(checkpoint.lastSyncTime) : undefined,
         lastSyncedAt: now,
         nextSyncAt: new Date(now.getTime() + 5 * 60 * 1000), // +5 min
@@ -962,7 +962,7 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
       where: { syncType: this.SYNC_TYPE },
       data: {
         status: SyncStatus.IDLE,
-        checkpoint: { backfillComplete: false },
+        checkpoint: JSON.parse(JSON.stringify({ backfillComplete: false })),
         watermark: null,
         watermarkTime: null,
         totalFetched: 0,
