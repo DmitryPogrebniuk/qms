@@ -119,7 +119,7 @@ export class MediaSenseIngestionService {
   private async _processRecordingMetadata(recording: any): Promise<void> {
     try {
       await this.prisma.recording.upsert({
-        where: { mediasenseRecordingId: recording.recordingId },
+        where: { mediasenseSessionId: recording.sessionId || recording.mediasenseSessionId || '' },
         update: {
           endTime: new Date(recording.endTime),
           durationSeconds: recording.duration,
