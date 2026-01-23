@@ -21,6 +21,16 @@
     "admin": "Адміністрація",
     "adminSettings": "Параметри інтеграції"
   },
+  "ciscoNav": {
+    "home": "Головна",
+    "reportDashboards": "Панелі звітів",
+    "reports": "Звіти",
+    "reportDefinitions": "Визначення звітів",
+    "valueLists": "Списки значень",
+    "settings": "Налаштування",
+    "schedules": "Розклади",
+    "interactiveHelp": "Інтерактивна довідка"
+  },
   "dashboard": {
     "title": "Система управління якістю",
     "welcome": "Ласкаво просимо до QMS",

@@ -21,6 +21,16 @@
     "admin": "Administration",
     "adminSettings": "Integration Settings"
   },
+  "ciscoNav": {
+    "home": "Home",
+    "reportDashboards": "Report Dashboards",
+    "reports": "Reports",
+    "reportDefinitions": "Report Definitions",
+    "valueLists": "Value Lists",
+    "settings": "Settings",
+    "schedules": "Schedules",
+    "interactiveHelp": "Interactive Help"
+  },
   "dashboard": {
     "title": "Quality Management System",
     "welcome": "Welcome to QMS",
