@@ -158,45 +158,202 @@ model AgentSkill {
 
 model Recording {
   id String @id @default(cuid())
-  mediasenseRecordingId String @unique @db.VarChar(255)
+  mediasenseSessionId String @unique @db.VarChar(255) // Primary key from MediaSense
+  mediasenseRecordingId String? @db.VarChar(255) // Optional recording ID
   
-  agentId String
-  teamCode String
+  // Agent/Team linking (nullable for graceful handling)
+  agentId String?
+  teamCode String?
+  agentName String? @db.VarChar(255) // Denormalized for search
+  teamName String? @db.VarChar(255) // Denormalized for search
   
+  // Time info
   startTime DateTime @db.Timestamptz()
-  endTime DateTime @db.Timestamptz()
-  durationSeconds Int
+  endTime DateTime? @db.Timestamptz()
+  durationSeconds Int @default(0)
   
+  // Call identifiers
   contactId String? @db.VarChar(100)
-  callId String? @db.VarChar(100)
-  direction String @db.VarChar(20) // 'inbound' or 'outbound'
+  callId String? @db.VarChar(255)
+  sessionSequence Int? // For multi-leg calls
   
-  ani String? @db.VarChar(50)
-  dnis String? @db.VarChar(50)
-  csq String? @db.VarChar(100)
-  wrapUpReason String? @db.VarChar(100)
+  // Direction
+  direction String @db.VarChar(20) @default("unknown") // 'inbound', 'outbound', 'internal', 'unknown'
   
-  transferCount Int? @default(0)
-  holdTimeSeconds Int? @default(0)
+  // Party info
+  ani String? @db.VarChar(100) // Caller number
+  dnis String? @db.VarChar(100) // Dialed number
+  callerName String? @db.VarChar(255)
+  calledName String? @db.VarChar(255)
+  extension String? @db.VarChar(50)
   
+  // Routing info
+  csq String? @db.VarChar(255) // Contact Service Queue
+  queueName String? @db.VarChar(255)
+  skillGroup String? @db.VarChar(255)
+  
+  // Post-call
+  wrapUpReason String? @db.VarChar(255)
+  wrapUpCode String? @db.VarChar(100)
+  dispositionCode String? @db.VarChar(100)
+  
+  // Call metrics
+  transferCount Int @default(0)
+  holdTimeSeconds Int @default(0)
+  talkTimeSeconds Int @default(0)
+  ringTimeSeconds Int @default(0)
+  queueTimeSeconds Int @default(0)
+  
+  // Media info
+  hasAudio Boolean @default(false)
+  audioCodec String? @db.VarChar(50)
+  audioSampleRate Int?
+  audioBitrate Int?
+  audioChannels Int @default(1) // 1=mono, 2=stereo
+  audioFormat String? @db.VarChar(50) // wav, au, etc.
+  audioSizeBytes BigInt?
+  audioUrl String? @db.VarChar(1024) // MediaSense media URL
+  
+  // Recorder info
+  recorderNode String? @db.VarChar(255)
+  recorderCluster String? @db.VarChar(255)
+  
+  // System fields
   isArchived Boolean @default(false)
-  rawJson Json?
+  isDeleted Boolean @default(false)
+  syncedAt DateTime? @db.Timestamptz() // When last synced
+  mediaCheckedAt DateTime? @db.Timestamptz() // When media availability was checked
+  
+  // Store full raw JSON for debugging/future use
+  rawMetadata Json?
+  customFields Json? // For any custom/tag fields
+  
+  // Full-text search field (Postgres)
+  searchVector String? @db.Text // Generated from ani, dnis, agentName, etc.
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
-  // Relations
-  agent Agent @relation(fields: [agentId], references: [id], onDelete: Restrict)
-  team Team @relation(fields: [teamCode], references: [teamCode], onDelete: Restrict)
+  // Relations (optional to allow partial data)
+  agent Agent? @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  team Team? @relation(fields: [teamCode], references: [teamCode], onDelete: SetNull)
   evaluation Evaluation?
   bookmarks EvaluationBookmark[]
+  tags RecordingTag[]
+  notes RecordingNote[]
+  participants RecordingParticipant[]
+  exportJobs ExportJob[]
 
   @@index([agentId])
   @@index([teamCode])
   @@index([startTime])
+  @@index([endTime])
+  @@index([mediasenseSessionId])
   @@index([mediasenseRecordingId])
   @@index([contactId])
   @@index([callId])
+  @@index([ani])
+  @@index([dnis])
+  @@index([direction])
+  @@index([hasAudio])
+  @@index([csq])
+  @@index([wrapUpReason])
+  @@index([syncedAt])
+  @@index([durationSeconds])
+}
+
+model RecordingParticipant {
+  id String @id @default(cuid())
+  recordingId String
+  
+  participantType String @db.VarChar(50) // 'agent', 'caller', 'called', 'transfer', 'conference'
+  participantId String? @db.VarChar(255) // Agent ID or device ID
+  participantName String? @db.VarChar(255)
+  phoneNumber String? @db.VarChar(100)
+  deviceName String? @db.VarChar(255)
+  
+  joinTime DateTime? @db.Timestamptz()
+  leaveTime DateTime? @db.Timestamptz()
+  
+  createdAt DateTime @default(now())
+  
+  recording Recording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+  
+  @@index([recordingId])
+  @@index([participantId])
+}
+
+model RecordingTag {
+  id String @id @default(cuid())
+  recordingId String
+  
+  tagName String @db.VarChar(100)
+  tagValue String? @db.VarChar(255)
+  tagSource String @db.VarChar(50) @default("user") // 'user', 'mediasense', 'auto'
+  
+  createdBy String?
+  createdAt DateTime @default(now())
+  
+  recording Recording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+  
+  @@unique([recordingId, tagName])
+  @@index([recordingId])
+  @@index([tagName])
+}
+
+model RecordingNote {
+  id String @id @default(cuid())
+  recordingId String
+  
+  noteText String @db.Text
+  timestamp Int? // Seconds into recording (for timed notes)
+  
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  recording Recording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+  
+  @@index([recordingId])
+}
+
+model ExportJob {
+  id String @id @default(cuid())
+  recordingId String
+  
+  format String @db.VarChar(20) @default("mp3") // 'mp3', 'wav', 'ogg'
+  quality String @db.VarChar(20) @default("standard") // 'low', 'standard', 'high'
+  
+  status ExportStatus @default(PENDING)
+  progress Int @default(0) // 0-100
+  
+  outputPath String? @db.VarChar(1024)
+  outputSizeBytes BigInt?
+  downloadUrl String? @db.VarChar(1024)
+  downloadExpiresAt DateTime?
+  
+  errorMessage String?
+  
+  requestedBy String
+  startedAt DateTime?
+  completedAt DateTime?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  recording Recording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+  
+  @@index([recordingId])
+  @@index([status])
+  @@index([requestedBy])
+}
+
+enum ExportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  EXPIRED
 }
 
 // ============================================================================
@@ -559,19 +716,63 @@ model SyncState {
   id String @id @default(cuid())
   syncType String @unique @db.VarChar(100) // 'uccx_full', 'uccx_incremental', 'mediasense', etc.
   
-  lastSyncedAt DateTime?
-  nextSyncAt DateTime?
+  lastSyncedAt DateTime? @db.Timestamptz()
+  nextSyncAt DateTime? @db.Timestamptz()
   
-  watermark String? // For incremental syncs
+  watermark String? // For incremental syncs (JSON with timestamp + lastId)
+  watermarkTime DateTime? @db.Timestamptz() // Last synced timestamp
+  checkpoint Json? // Additional checkpoint data
+  
   status SyncStatus @default(IDLE)
   
+  // Statistics
+  totalFetched Int @default(0)
+  totalCreated Int @default(0)
+  totalUpdated Int @default(0)
+  totalErrors Int @default(0)
+  lastBatchSize Int @default(0)
+  
+  lastDurationMs Int?
   errorMessage String?
+  errorDetails Json?
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // History
+  syncHistory SyncHistory[]
+
   @@index([syncType])
   @@index([status])
+}
+
+model SyncHistory {
+  id String @id @default(cuid())
+  syncStateId String
+  
+  startedAt DateTime @default(now()) @db.Timestamptz()
+  completedAt DateTime? @db.Timestamptz()
+  
+  status SyncStatus @default(IN_PROGRESS)
+  
+  fetched Int @default(0)
+  created Int @default(0)
+  updated Int @default(0)
+  skipped Int @default(0)
+  errors Int @default(0)
+  
+  durationMs Int?
+  errorMessage String?
+  
+  triggeredBy String? // 'scheduler', 'manual', 'backfill'
+  correlationId String? @db.VarChar(100)
+  
+  createdAt DateTime @default(now())
+  
+  syncState SyncState @relation(fields: [syncStateId], references: [id], onDelete: Cascade)
+  
+  @@index([syncStateId])
+  @@index([startedAt])
 }
 
 enum SyncStatus {
@@ -579,4 +780,5 @@ enum SyncStatus {
   IN_PROGRESS
   SUCCESS
   FAILED
+  PARTIAL // Some records synced but with errors
 }

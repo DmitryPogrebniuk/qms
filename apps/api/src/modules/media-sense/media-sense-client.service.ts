@@ -553,22 +553,265 @@ export class MediaSenseClientService {
 
   /**
    * Query sessions from MediaSense
+   * 
+   * Note: MediaSense query API varies by version. Common endpoints:
+   * - /ora/queryService/query/sessions (v10+)
+   * - /ora/recording/api/sessions (older versions)
+   * 
+   * Adjust the request format based on your MediaSense version.
    */
   async querySessions(params: {
-    startTime: Date;
-    endTime: Date;
-    maxResults?: number;
+    startTime: string;
+    endTime: string;
+    limit?: number;
     offset?: number;
     agentId?: string;
+    direction?: string;
+    ani?: string;
+    dnis?: string;
   }): Promise<MediaSenseResponse<any[]>> {
-    return this.request('POST', this.endpoints.querySessions, {
-      queryType: 'sessions',
-      startTime: params.startTime.toISOString(),
-      endTime: params.endTime.toISOString(),
-      maxResults: params.maxResults || 100,
-      offset: params.offset || 0,
-      ...(params.agentId && { agentId: params.agentId }),
+    const requestId = this.generateRequestId();
+
+    this.msLogger.debug(`[${requestId}] Query sessions`, {
+      startTime: params.startTime,
+      endTime: params.endTime,
+      limit: params.limit,
+      offset: params.offset,
     });
+
+    // Build query body based on MediaSense API format
+    // Note: This may need adjustment for your specific MediaSense version
+    const queryBody: any = {
+      queryType: 'sessions',
+      conditions: [
+        {
+          field: 'sessionStartTime',
+          operator: 'gte',
+          value: params.startTime,
+        },
+        {
+          field: 'sessionEndTime',
+          operator: 'lte',
+          value: params.endTime,
+        },
+      ],
+      sorting: [
+        { field: 'sessionEndTime', order: 'asc' },
+      ],
+      paging: {
+        offset: params.offset || 0,
+        limit: params.limit || 100,
+      },
+    };
+
+    // Add optional filters
+    if (params.agentId) {
+      queryBody.conditions.push({
+        field: 'agentId',
+        operator: 'eq',
+        value: params.agentId,
+      });
+    }
+
+    if (params.direction) {
+      queryBody.conditions.push({
+        field: 'direction',
+        operator: 'eq',
+        value: params.direction,
+      });
+    }
+
+    if (params.ani) {
+      queryBody.conditions.push({
+        field: 'ani',
+        operator: 'contains',
+        value: params.ani,
+      });
+    }
+
+    if (params.dnis) {
+      queryBody.conditions.push({
+        field: 'dnis',
+        operator: 'contains',
+        value: params.dnis,
+      });
+    }
+
+    try {
+      const response = await this.request('POST', this.endpoints.querySessions, queryBody);
+      
+      if (!response.success) {
+        // Try alternative query format for older MediaSense versions
+        return this.querySessionsAlternative(params, requestId);
+      }
+
+      return response;
+    } catch (error) {
+      this.msLogger.warn(`[${requestId}] Primary query failed, trying alternative`, {
+        error: (error as Error).message,
+      });
+      return this.querySessionsAlternative(params, requestId);
+    }
+  }
+
+  /**
+   * Alternative query format for older MediaSense versions
+   */
+  private async querySessionsAlternative(
+    params: {
+      startTime: string;
+      endTime: string;
+      limit?: number;
+      offset?: number;
+      agentId?: string;
+    },
+    requestId: string,
+  ): Promise<MediaSenseResponse<any[]>> {
+    // Alternative query format with URL parameters
+    const queryParams = new URLSearchParams({
+      startTime: params.startTime,
+      endTime: params.endTime,
+      maxResults: String(params.limit || 100),
+      offset: String(params.offset || 0),
+    });
+
+    if (params.agentId) {
+      queryParams.set('agentId', params.agentId);
+    }
+
+    const alternativeEndpoints = [
+      `/ora/queryService/query/sessions?${queryParams}`,
+      `/ora/recording/api/sessions?${queryParams}`,
+      `/ora/api/v1/sessions?${queryParams}`,
+    ];
+
+    for (const endpoint of alternativeEndpoints) {
+      try {
+        const response = await this.request('GET', endpoint);
+        if (response.success) {
+          this.msLogger.info(`[${requestId}] Alternative endpoint worked: ${endpoint.split('?')[0]}`);
+          return response;
+        }
+      } catch (error) {
+        continue;
+      }
+    }
+
+    return {
+      success: false,
+      error: 'All query endpoints failed',
+      requestId,
+      duration: 0,
+    };
+  }
+
+  /**
+   * Get media/audio stream URL for a session
+   */
+  async getMediaUrl(sessionId: string, trackIndex: number = 0): Promise<MediaSenseResponse<string>> {
+    const requestId = this.generateRequestId();
+
+    // Try different media URL patterns
+    const mediaEndpoints = [
+      `/ora/mediaService/media/session/${sessionId}/track/${trackIndex}`,
+      `/ora/media/${sessionId}`,
+      `/ora/recording/api/media/${sessionId}`,
+    ];
+
+    for (const endpoint of mediaEndpoints) {
+      try {
+        // Just get the URL/info, don't download
+        const response = await this.request('GET', endpoint, undefined, {
+          validateStatus: () => true,
+          maxRedirects: 0,
+        });
+
+        if (response.success && response.data?.url) {
+          return {
+            success: true,
+            data: response.data.url,
+            requestId,
+            duration: response.duration,
+          };
+        }
+
+        // Check for redirect (actual media URL)
+        if (response.statusCode === 302 || response.statusCode === 307) {
+          // The redirect location is the media URL
+          const mediaUrl = response.data?.location || response.data?.redirect;
+          if (mediaUrl) {
+            return {
+              success: true,
+              data: mediaUrl,
+              requestId,
+              duration: response.duration,
+            };
+          }
+        }
+      } catch (error) {
+        continue;
+      }
+    }
+
+    // Construct default URL pattern
+    const baseUrl = this.config?.baseUrl || '';
+    const defaultUrl = `${baseUrl}/ora/mediaService/media/session/${sessionId}/track/${trackIndex}`;
+
+    return {
+      success: true,
+      data: defaultUrl,
+      requestId,
+      duration: 0,
+    };
+  }
+
+  /**
+   * Stream media directly (for proxying)
+   */
+  async streamMedia(
+    sessionId: string,
+    trackIndex: number = 0,
+    range?: string,
+  ): Promise<{
+    stream: any;
+    headers: Record<string, string>;
+    statusCode: number;
+  }> {
+    if (!this.axiosInstance || !this.config) {
+      throw new Error('Client not configured');
+    }
+
+    await this.ensureAuthenticated();
+
+    const mediaUrl = await this.getMediaUrl(sessionId, trackIndex);
+    if (!mediaUrl.success || !mediaUrl.data) {
+      throw new Error('Could not get media URL');
+    }
+
+    const headers: Record<string, string> = {
+      ...this.getSessionHeaders(),
+    };
+
+    if (range) {
+      headers['Range'] = range;
+    }
+
+    const response = await this.axiosInstance.get(mediaUrl.data, {
+      headers,
+      responseType: 'stream',
+      validateStatus: (status) => status < 400,
+    });
+
+    return {
+      stream: response.data,
+      headers: {
+        'Content-Type': response.headers['content-type'] || 'audio/wav',
+        'Content-Length': response.headers['content-length'],
+        'Accept-Ranges': response.headers['accept-ranges'] || 'bytes',
+        'Content-Range': response.headers['content-range'],
+      },
+      statusCode: response.status,
+    };
   }
 
   /**
@@ -576,6 +819,15 @@ export class MediaSenseClientService {
    */
   async getSessionById(sessionId: string): Promise<MediaSenseResponse<any>> {
     return this.request('GET', `${this.endpoints.querySessionById}/${sessionId}`);
+  }
+
+  /**
+   * Ensure we have a valid session
+   */
+  private async ensureAuthenticated(): Promise<void> {
+    if (!this.session || new Date() > this.session.expiresAt) {
+      await this.login();
+    }
   }
 
   // ==================== Helper Methods ====================

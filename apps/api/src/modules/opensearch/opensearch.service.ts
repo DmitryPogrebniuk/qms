@@ -1,16 +1,35 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 
 /**
- * OpenSearch integration for recording metadata indexing
+ * OpenSearch integration for recording metadata indexing and search
  */
+
+export interface OpenSearchQuery {
+  index: string;
+  query: any;
+  sort?: any[];
+  from?: number;
+  size?: number;
+  aggs?: any;
+}
+
+export interface OpenSearchResult {
+  total: number;
+  hits: any[];
+  aggregations?: any;
+}
+
 @Injectable()
-export class OpenSearchService {
+export class OpenSearchService implements OnModuleInit {
   private readonly logger = new Logger('OpenSearchService');
   private readonly osHost: string;
   private readonly osPort: number;
+  private readonly osProtocol: string;
   private readonly osAuth?: string;
+  private readonly indexPrefix: string;
+  private initialized = false;
 
   constructor(
     private readonly configService: ConfigService,
@@ -18,6 +37,8 @@ export class OpenSearchService {
   ) {
     this.osHost = configService.get<string>('OPENSEARCH_HOST') || 'localhost';
     this.osPort = configService.get<number>('OPENSEARCH_PORT') || 9200;
+    this.osProtocol = configService.get<boolean>('OPENSEARCH_TLS') ? 'https' : 'http';
+    this.indexPrefix = configService.get<string>('OPENSEARCH_INDEX_PREFIX') || 'qms';
 
     const username = configService.get<string>('OPENSEARCH_USERNAME');
     const password = configService.get<string>('OPENSEARCH_PASSWORD');
@@ -26,49 +47,165 @@ export class OpenSearchService {
     }
   }
 
+  async onModuleInit() {
+    if (this.osHost) {
+      await this.ensureIndexTemplate();
+      this.initialized = true;
+    }
+  }
+
+  /**
+   * Create index template for recordings
+   */
+  private async ensureIndexTemplate(): Promise<void> {
+    try {
+      const templateName = `${this.indexPrefix}-recordings-template`;
+      const template = {
+        index_patterns: [`${this.indexPrefix}-recordings-*`],
+        template: {
+          settings: {
+            number_of_shards: 1,
+            number_of_replicas: 0,
+            'index.mapping.total_fields.limit': 2000,
+          },
+          mappings: {
+            properties: {
+              id: { type: 'keyword' },
+              mediasenseSessionId: { type: 'keyword' },
+              agentId: { type: 'keyword' },
+              agentName: { type: 'text', fields: { keyword: { type: 'keyword' } } },
+              teamCode: { type: 'keyword' },
+              teamName: { type: 'text', fields: { keyword: { type: 'keyword' } } },
+              startTime: { type: 'date' },
+              endTime: { type: 'date' },
+              durationSeconds: { type: 'integer' },
+              direction: { type: 'keyword' },
+              ani: { type: 'keyword', fields: { text: { type: 'text' } } },
+              dnis: { type: 'keyword', fields: { text: { type: 'text' } } },
+              callerName: { type: 'text', fields: { keyword: { type: 'keyword' } } },
+              calledName: { type: 'text', fields: { keyword: { type: 'keyword' } } },
+              csq: { type: 'keyword' },
+              queueName: { type: 'text', fields: { keyword: { type: 'keyword' } } },
+              skillGroup: { type: 'keyword' },
+              wrapUpReason: { type: 'keyword' },
+              callId: { type: 'keyword' },
+              hasAudio: { type: 'boolean' },
+              tags: { type: 'keyword' },
+              searchText: { type: 'text', analyzer: 'standard' },
+            },
+          },
+        },
+      };
+
+      await this.httpService.axiosRef.put(
+        `${this._getBaseUrl()}/_index_template/${templateName}`,
+        template,
+        { headers: this._getHeaders() },
+      );
+
+      this.logger.log('OpenSearch index template created/updated');
+    } catch (error: any) {
+      if (error.response?.status !== 400) {
+        this.logger.error('Failed to create index template:', error.message);
+      }
+    }
+  }
+
   /**
    * Index a recording in OpenSearch
    */
   async indexRecording(recording: any): Promise<void> {
+    if (!this.initialized) {
+      this.logger.warn('OpenSearch not initialized, skipping indexing');
+      return;
+    }
+
     try {
       const indexName = this._getIndexName(new Date(recording.startTime));
       const headers = this._getHeaders();
 
       await this.httpService.axiosRef.post(
-        `http://${this.osHost}:${this.osPort}/${indexName}/_doc/${recording.id}`,
+        `${this._getBaseUrl()}/${indexName}/_doc/${recording.id}`,
         {
+          id: recording.id,
+          mediasenseSessionId: recording.mediasenseSessionId,
           agentId: recording.agentId,
+          agentName: recording.agentName,
           teamCode: recording.teamCode,
+          teamName: recording.teamName,
           startTime: recording.startTime,
           endTime: recording.endTime,
           durationSeconds: recording.durationSeconds,
-          callId: recording.callId,
+          direction: recording.direction,
           ani: recording.ani,
           dnis: recording.dnis,
+          callerName: recording.callerName,
+          calledName: recording.calledName,
           csq: recording.csq,
+          queueName: recording.queueName,
+          skillGroup: recording.skillGroup,
           wrapUpReason: recording.wrapUpReason,
-          transferCount: recording.transferCount,
-          holdTimeSeconds: recording.holdTimeSeconds,
-          isArchived: recording.isArchived,
+          callId: recording.callId,
+          hasAudio: recording.hasAudio,
+          tags: recording.tags || [],
+          searchText: recording.searchText,
         },
         { headers },
       );
 
       this.logger.debug(`Indexed recording ${recording.id} in ${indexName}`);
-    } catch (error) {
-      this.logger.error(`Failed to index recording ${recording.id}:`, error);
+    } catch (error: any) {
+      this.logger.error(`Failed to index recording ${recording.id}:`, error.message);
       throw error;
     }
   }
 
   /**
-   * Search recordings with RBAC
+   * Search recordings with aggregations
+   */
+  async searchWithAggregations(query: OpenSearchQuery): Promise<OpenSearchResult> {
+    if (!this.initialized) {
+      throw new Error('OpenSearch not initialized');
+    }
+
+    try {
+      const body: any = {
+        query: query.query,
+        size: query.size || 20,
+        from: query.from || 0,
+      };
+
+      if (query.sort) {
+        body.sort = query.sort;
+      }
+
+      if (query.aggs) {
+        body.aggs = query.aggs;
+      }
+
+      const response = await this.httpService.axiosRef.post(
+        `${this._getBaseUrl()}/${query.index}/_search`,
+        body,
+        { headers: this._getHeaders() },
+      );
+
+      return {
+        total: response.data.hits.total?.value || response.data.hits.total || 0,
+        hits: response.data.hits.hits || [],
+        aggregations: response.data.aggregations,
+      };
+    } catch (error: any) {
+      this.logger.error('OpenSearch search error:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Legacy search method for compatibility
    */
   async searchRecordings(query: any, accessControl: any): Promise<any> {
     try {
-      const indexName = `${this._getIndexName(new Date())}*`; // Search current month + all previous
-
-      // Build OpenSearch query with access control
+      const indexName = `${this.indexPrefix}-recordings-*`;
       const mustClauses = [];
 
       if (accessControl.agentIds) {
@@ -92,7 +229,7 @@ export class OpenSearchService {
       const headers = this._getHeaders();
 
       const response = await this.httpService.axiosRef.post(
-        `http://${this.osHost}:${this.osPort}/${indexName}/_search`,
+        `${this._getBaseUrl()}/${indexName}/_search`,
         {
           query: { bool: { must: mustClauses.length > 0 ? mustClauses : [{ match_all: {} }] } },
           size: query.pageSize || 20,
@@ -103,13 +240,54 @@ export class OpenSearchService {
       );
 
       return {
-        total: response.data.hits.total.value,
+        total: response.data.hits.total?.value || response.data.hits.total,
         hits: response.data.hits.hits.map((hit: any) => hit._source),
       };
-    } catch (error) {
-      this.logger.error('Search error:', error);
+    } catch (error: any) {
+      this.logger.error('Search error:', error.message);
       throw error;
     }
+  }
+
+  /**
+   * Delete recording from index
+   */
+  async deleteRecording(recordingId: string): Promise<void> {
+    if (!this.initialized) return;
+
+    try {
+      await this.httpService.axiosRef.post(
+        `${this._getBaseUrl()}/${this.indexPrefix}-recordings-*/_delete_by_query`,
+        {
+          query: { term: { id: recordingId } },
+        },
+        { headers: this._getHeaders() },
+      );
+    } catch (error: any) {
+      this.logger.warn(`Failed to delete recording ${recordingId} from index:`, error.message);
+    }
+  }
+
+  /**
+   * Check OpenSearch health
+   */
+  async healthCheck(): Promise<{ status: string; cluster: string }> {
+    try {
+      const response = await this.httpService.axiosRef.get(
+        `${this._getBaseUrl()}/_cluster/health`,
+        { headers: this._getHeaders() },
+      );
+      return {
+        status: response.data.status,
+        cluster: response.data.cluster_name,
+      };
+    } catch {
+      return { status: 'unreachable', cluster: '' };
+    }
+  }
+
+  private _getBaseUrl(): string {
+    return `${this.osProtocol}://${this.osHost}:${this.osPort}`;
   }
 
   /**
@@ -118,7 +296,7 @@ export class OpenSearchService {
   private _getIndexName(date: Date): string {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
-    return `recordings-${year}.${month}`;
+    return `${this.indexPrefix}-recordings-${year}.${month}`;
   }
 
   /**
