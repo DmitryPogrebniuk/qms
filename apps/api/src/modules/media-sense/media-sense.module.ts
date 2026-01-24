@@ -28,6 +28,8 @@ import { AuthModule } from '../auth/auth.module';
     MediaSenseClientService,
     MediaSenseLogger,
     MediaSenseSyncService,
+    // Додаємо PrismaService для DI у контролер
+    require('@/common/prisma/prisma.service').PrismaService,
   ],
   exports: [
     MediaSenseIngestionService,
