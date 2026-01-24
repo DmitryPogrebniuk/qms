@@ -47,7 +47,7 @@ export class MediaSenseIntegrationController {
   constructor(
     private readonly mediaSenseClient: MediaSenseClientService,
     private readonly logger: MediaSenseLogger,
-    private readonly prisma: any, // Use correct PrismaService import in real code
+    private readonly prisma: import('@/common/prisma/prisma.service').PrismaService,
   ) {}
   /**
    * Save MediaSense config
