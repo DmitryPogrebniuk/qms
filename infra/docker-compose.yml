@@ -100,7 +100,7 @@ services:
       UCCX_PASSWORD: password
       UCCX_TIMEOUT_MS: 30000
       UCCX_RETRY_ATTEMPTS: 2
-      MEDIASENSE_HOST: mediasense.example.com
+      MEDIASENSE_HOST: 192.168.200.133
       MEDIASENSE_PORT: 8443
       MEDIASENSE_USERNAME: admin
       MEDIASENSE_PASSWORD: password

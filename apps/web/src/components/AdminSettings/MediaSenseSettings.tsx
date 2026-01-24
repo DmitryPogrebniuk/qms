@@ -276,7 +276,7 @@ export default function MediaSenseSettings() {
             label={t('admin.mediaSenseUrl')}
             value={config.apiUrl}
             onChange={(e) => handleChange('apiUrl', e.target.value)}
-            placeholder="https://mediasense.example.com:8440"
+            placeholder="https://192.168.200.133:8440"
             disabled={saving}
             helperText={t('mediaSense.urlHelp', 'Default port: 8440')}
           />
