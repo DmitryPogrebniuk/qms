@@ -118,7 +118,7 @@ echo ""
 echo "6. Перевірка статусу синхронізації MediaSense..."
 SYNC_STATUS=$(cd /opt/qms && sudo docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U qms_user -d qms -t -c "
     SELECT 
-        status::text || ' | Fetched: ' || \"totalFetched\"::text || ' | Created: ' || \"totalCreated\"::text || ' | Updated: ' || \"totalUpdated\"::text
+        status::text || ' | Fetched: ' || \"totalFetched\"::text || ' | Created: ' || \"totalCreated\"::text || ' | Updated: ' || \"totalUpdated\"::text || ' | Backfill: ' || COALESCE((checkpoint::jsonb)->>'backfillComplete', 'unknown')
     FROM \"SyncState\" 
     WHERE \"syncType\" = 'mediasense_recordings';
 " 2>/dev/null | tr -d ' ')
