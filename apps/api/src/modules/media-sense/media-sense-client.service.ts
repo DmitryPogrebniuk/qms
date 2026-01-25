@@ -212,7 +212,12 @@ export class MediaSenseClientService {
       baseUrl: this.maskSensitiveUrl(this.config.baseUrl),
     });
 
-    // Try primary login endpoint
+    // Try primary login endpoint with Basic Auth (some MediaSense versions require this)
+    const auth = Buffer.from(
+      `${this.config.apiKey}:${this.config.apiSecret}`,
+    ).toString('base64');
+
+    // Strategy 1: POST with Basic Auth header (not in body)
     try {
       const response = await this.axiosInstance.post(
         this.endpoints.login,
@@ -221,6 +226,9 @@ export class MediaSenseClientService {
           password: this.config.apiSecret,
         },
         {
+          headers: {
+            Authorization: `Basic ${auth}`,
+          },
           validateStatus: () => true, // Don't throw on any status
         },
       );
@@ -291,11 +299,11 @@ export class MediaSenseClientService {
       `${this.config.apiKey}:${this.config.apiSecret}`,
     ).toString('base64');
 
-    // Strategy 1: Try Basic Auth on login endpoint
+    // Strategy 1: Try Basic Auth on login endpoint with empty body
     try {
       const loginResponse = await this.axiosInstance.post(
         this.endpoints.login,
-        {},
+        {}, // Empty body, credentials in Basic Auth header
         {
           headers: {
             Authorization: `Basic ${auth}`,
