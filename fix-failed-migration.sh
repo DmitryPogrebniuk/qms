@@ -40,7 +40,7 @@ cd /opt/qms || { log_error "Не вдалося перейти в /opt/qms"; exi
 
 # Визначити DB user
 log_info "Визначення credentials БД..."
-if cd /opt/qms && sudo docker compose -f "$COMPOSE_FILE" exec postgres psql -U qms_user -d qms -c "SELECT 1;" > /dev/null 2>&1; then
+if cd /opt/qms && sudo docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U qms_user -d qms -c "SELECT 1;" > /dev/null 2>&1; then
     DB_USER="qms_user"
     log_info "✓ Використовується qms_user"
 else
@@ -50,19 +50,19 @@ fi
 
 # Перевірити, чи PARTIAL існує
 log_info "Перевірка, чи PARTIAL існує в enum..."
-PARTIAL_EXISTS=$(cd /opt/qms && sudo docker compose -f "$COMPOSE_FILE" exec postgres psql -U "$DB_USER" -d qms -t -c "
+PARTIAL_EXISTS=$(cd /opt/qms && sudo docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U "$DB_USER" -d qms -t -c "
     SELECT COUNT(*) 
     FROM pg_enum 
     WHERE enumlabel = 'PARTIAL' 
     AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'SyncStatus');
-" | tr -d ' ')
+" 2>/dev/null | tr -d ' ' || echo "0")
 
 if [ "$PARTIAL_EXISTS" = "1" ]; then
     log_info "✓ PARTIAL існує в enum - міграція фактично успішна"
     
     # Перевірити статус міграції
     log_info "Перевірка статусу міграції в _prisma_migrations..."
-    MIGRATION_STATUS=$(cd /opt/qms && sudo docker compose -f "$COMPOSE_FILE" exec postgres psql -U "$DB_USER" -d qms -t -c "
+    MIGRATION_STATUS=$(cd /opt/qms && sudo docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U "$DB_USER" -d qms -t -c "
         SELECT 
             CASE 
                 WHEN finished_at IS NOT NULL THEN 'finished'
@@ -71,14 +71,14 @@ if [ "$PARTIAL_EXISTS" = "1" ]; then
             END as status
         FROM \"_prisma_migrations\" 
         WHERE migration_name = '0005_add_partial_to_sync_status';
-    " | tr -d ' ')
+    " 2>/dev/null | tr -d ' ' || echo "failed")
     
     if [ "$MIGRATION_STATUS" = "failed" ]; then
         log_warn "Міграція позначена як failed, але PARTIAL існує"
         log_info "Виправлення статусу міграції..."
         
         # Оновити міграцію як успішну
-        cd /opt/qms && sudo docker compose -f "$COMPOSE_FILE" exec postgres psql -U "$DB_USER" -d qms << EOF
+        cd /opt/qms && sudo docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U "$DB_USER" -d qms << 'EOF'
 UPDATE "_prisma_migrations"
 SET 
     finished_at = COALESCE(finished_at, started_at, NOW()),
@@ -99,11 +99,11 @@ else
     
     # Спробувати застосувати міграцію вручну
     log_info "Спроба застосувати міграцію вручну..."
-    if cd /opt/qms && sudo docker compose -f "$COMPOSE_FILE" exec postgres psql -U "$DB_USER" -d qms -c "ALTER TYPE \"SyncStatus\" ADD VALUE 'PARTIAL';" 2>/dev/null; then
+    if cd /opt/qms && sudo docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U "$DB_USER" -d qms -c "ALTER TYPE \"SyncStatus\" ADD VALUE 'PARTIAL';" 2>/dev/null; then
         log_info "✓ PARTIAL додано вручну"
         
         # Позначити міграцію як успішну
-        cd /opt/qms && sudo docker compose -f "$COMPOSE_FILE" exec postgres psql -U "$DB_USER" -d qms << EOF
+        cd /opt/qms && sudo docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U "$DB_USER" -d qms << 'EOF'
 UPDATE "_prisma_migrations"
 SET 
     finished_at = COALESCE(finished_at, started_at, NOW()),
@@ -121,19 +121,19 @@ fi
 
 # Видалити всі failed міграції (якщо є)
 log_info "Перевірка інших failed міграцій..."
-FAILED_COUNT=$(cd /opt/qms && sudo docker compose -f "$COMPOSE_FILE" exec postgres psql -U "$DB_USER" -d qms -t -c "
+FAILED_COUNT=$(cd /opt/qms && sudo docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U "$DB_USER" -d qms -t -c "
     SELECT COUNT(*) 
     FROM \"_prisma_migrations\" 
     WHERE finished_at IS NULL 
       AND rolled_back_at IS NULL;
-" | tr -d ' ')
+" 2>/dev/null | tr -d ' ' || echo "0")
 
 if [ "$FAILED_COUNT" -gt 0 ]; then
     log_warn "Знайдено $FAILED_COUNT failed міграцій"
     log_info "Видалення failed міграцій (якщо вони не потрібні)..."
     
     # Видалити тільки міграцію 0005, якщо вона failed
-    cd /opt/qms && sudo docker compose -f "$COMPOSE_FILE" exec postgres psql -U "$DB_USER" -d qms << EOF
+    cd /opt/qms && sudo docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U "$DB_USER" -d qms << 'EOF'
 DELETE FROM "_prisma_migrations"
 WHERE migration_name = '0005_add_partial_to_sync_status'
   AND finished_at IS NULL
