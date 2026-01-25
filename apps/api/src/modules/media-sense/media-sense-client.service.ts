@@ -63,6 +63,8 @@ export class MediaSenseClientService {
     // Authentication endpoints (varies by MediaSense version)
     login: '/ora/authenticationService/authentication/login',
     logout: '/ora/authenticationService/authentication/logout',
+    // Java form-based authentication (j_security_check)
+    loginForm: '/j_security_check',
     // Alternative auth for some versions
     loginAlt: '/ora/authenticate',
     // Service info / health check
@@ -212,12 +214,57 @@ export class MediaSenseClientService {
       baseUrl: this.maskSensitiveUrl(this.config.baseUrl),
     });
 
-    // Try primary login endpoint with Basic Auth (some MediaSense versions require this)
+    // Try multiple authentication strategies
     const auth = Buffer.from(
       `${this.config.apiKey}:${this.config.apiSecret}`,
     ).toString('base64');
 
-    // Strategy 1: POST with Basic Auth header (not in body)
+    // Strategy 1: Java form-based authentication (j_security_check)
+    // This is the standard Java servlet authentication endpoint
+    try {
+      const formData = new URLSearchParams();
+      formData.append('j_username', this.config.apiKey);
+      formData.append('j_password', this.config.apiSecret);
+
+      const formResponse = await this.axiosInstance.post(
+        this.endpoints.loginForm,
+        formData.toString(),
+        {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          maxRedirects: 0, // Don't follow redirects automatically
+          validateStatus: (status) => status >= 200 && status < 400, // Accept 200, 302, etc.
+        },
+      );
+
+      const cookies = formResponse.headers['set-cookie'] || [];
+      const jsessionId = this.extractJSessionId(cookies);
+
+      if (jsessionId) {
+        this.session = {
+          sessionId: jsessionId,
+          cookies,
+          expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+        };
+
+        this.msLogger.info(`[${requestId}] Login successful (j_security_check)`, {
+          requestId,
+          duration: Date.now() - startTime,
+          sessionIdMasked: this.maskSessionId(jsessionId),
+          status: formResponse.status,
+        });
+
+        return this.session;
+      }
+    } catch (error) {
+      // j_security_check might not be available, continue to next strategy
+      this.msLogger.debug(`[${requestId}] j_security_check not available, trying other methods`, {
+        error: (error as Error).message,
+      });
+    }
+
+    // Strategy 2: POST with Basic Auth header
     try {
       const response = await this.axiosInstance.post(
         this.endpoints.login,
