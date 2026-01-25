@@ -125,9 +125,15 @@ EOF
 log_info "  Endpoint: POST /ora/queryService/query/getSessions"
 log_info "  Діапазон: $START_TIMESTAMP до $END_TIMESTAMP (timestamps в мілісекундах)"
 
+# MediaSense може вимагати інші cookies разом з JSESSIONID
+# З reverse engineering видно, що використовувалися також: timeBeforeFailover, pathInfo, тощо
+# Спробуємо спочатку тільки з JSESSIONID, потім з додатковими cookies якщо потрібно
+
 QUERY_RESPONSE=$(curl -k -s -w "\n%{http_code}" \
     -X POST "$API_URL/ora/queryService/query/getSessions" \
     -H "Content-Type: application/json" \
+    -H "Accept: application/json, text/javascript, */*; q=0.01" \
+    -H "X-Requested-With: XMLHttpRequest" \
     -H "Cookie: JSESSIONID=$JSESSIONID" \
     -d "$QUERY_BODY")
 
@@ -165,6 +171,13 @@ if [ "$QUERY_HTTP_CODE" = "200" ]; then
         elif [ "$RESPONSE_CODE" = "4021" ]; then
             log_error "  ✗ Помилка: Invalid session (responseCode: 4021)"
             log_warn "  JSESSIONID може бути невалідним або застарілим"
+            log_info ""
+            log_info "  Спробуйте:"
+            echo "    1. Отримайте СВІЖИЙ JSESSIONID з браузера (оновіть сторінку)"
+            echo "    2. Переконайтеся, що ви авторизовані в веб-інтерфейсі"
+            echo "    3. JSESSIONID має термін дії (зазвичай 30 хвилин)"
+            echo "    4. Можливо, потрібні інші cookies разом з JSESSIONID"
+            echo ""
             echo "  Відповідь:"
             echo "$QUERY_BODY_RESPONSE" | head -5 | sed 's/^/    /'
         else
