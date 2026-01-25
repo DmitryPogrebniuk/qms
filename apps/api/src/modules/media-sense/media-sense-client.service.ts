@@ -398,7 +398,7 @@ export class MediaSenseClientService {
         const cookies = response.headers['set-cookie'] || [];
         const jsessionId = this.extractJSessionId(cookies);
 
-        // If we got JSESSIONID, use it; otherwise Basic Auth might work for some endpoints
+        // If we got JSESSIONID, use it
         if (jsessionId) {
           this.session = {
             sessionId: jsessionId,
@@ -414,16 +414,18 @@ export class MediaSenseClientService {
 
           return this.session;
         } else {
-          // No JSESSIONID - this might not work for query endpoints
-          this.msLogger.warn(`[${requestId}] Basic Auth works but no JSESSIONID - query endpoints may fail`, {
+          // No JSESSIONID - use Basic Auth for all requests
+          // Some MediaSense versions may accept Basic Auth for query endpoints
+          this.msLogger.info(`[${requestId}] Basic Auth works, using it for all requests (no JSESSIONID)`, {
             requestId,
             duration: Date.now() - startTime,
+            note: 'Will use Basic Auth header for all API requests',
           });
 
-          // Still create session with Basic Auth, but it might not work for all endpoints
+          // Create session with Basic Auth - we'll use Authorization header for all requests
           this.session = {
             sessionId: `basic-${Date.now()}`,
-            cookies: [`Authorization=Basic ${auth}`],
+            cookies: [], // No cookies, will use Basic Auth header
             expiresAt: new Date(Date.now() + 30 * 60 * 1000),
           };
 
@@ -1022,7 +1024,7 @@ export class MediaSenseClientService {
   }
 
   private getSessionHeaders(): Record<string, string> {
-    if (!this.session) return {};
+    if (!this.session || !this.config) return {};
 
     const headers: Record<string, string> = {};
 
@@ -1033,6 +1035,7 @@ export class MediaSenseClientService {
       const jsessionId = this.extractJSessionId([jsessionCookie]);
       if (jsessionId) {
         headers['Cookie'] = `JSESSIONID=${jsessionId}`;
+        return headers; // JSESSIONID found, use it
       }
     } else if (this.session.cookies.length > 0) {
       // Fallback to all cookies
@@ -1042,12 +1045,17 @@ export class MediaSenseClientService {
       headers['Cookie'] = cookieHeader;
     }
 
-    // If no JSESSIONID and using Basic Auth fallback, add Authorization header
-    // But note: Basic Auth alone might not work for query endpoints
-    if (!jsessionCookie && this.session.sessionId.startsWith('basic-') && this.config) {
-      const auth = Buffer.from(
-        `${this.config.apiKey}:${this.config.apiSecret}`,
-      ).toString('base64');
+    // If no JSESSIONID, always include Basic Auth for all requests
+    // Some MediaSense versions/endpoints may accept Basic Auth even for query endpoints
+    const auth = Buffer.from(
+      `${this.config.apiKey}:${this.config.apiSecret}`,
+    ).toString('base64');
+    headers['Authorization'] = `Basic ${auth}`;
+
+    // Also try to include Basic Auth even if we have JSESSIONID (some endpoints may need both)
+    // This is a fallback strategy for endpoints that don't work with JSESSIONID alone
+    if (jsessionCookie && this.session.sessionId.startsWith('basic-')) {
+      // We have both - use both
       headers['Authorization'] = `Basic ${auth}`;
     }
 
