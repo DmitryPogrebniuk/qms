@@ -11,9 +11,11 @@ import { MediaSenseLogger } from './media-sense-logger.service';
  * MediaSense API typically uses:
  * - Port 8440 for HTTPS API
  * - /ora/ prefix for API paths
- * - JSESSIONID cookie for session authentication
+ * - JSESSIONIDSSO cookie for session authentication (MediaSense 11.5+)
+ * - JSESSIONID cookie as fallback
  * 
- * Reference: Cisco MediaSense Developer Guide
+ * Reference: Cisco MediaSense Developer Guide Release 11.0+
+ * Tested with: MediaSense 11.5.1.12001-8
  */
 
 export interface MediaSenseClientConfig {
@@ -58,19 +60,20 @@ export class MediaSenseClientService {
   private session: MediaSenseSession | null = null;
   private config: MediaSenseClientConfig | null = null;
 
-  // Configurable endpoints - can be updated based on MediaSense version
+  // Configurable endpoints for MediaSense 11.5.1.12001-8
+  // Based on Cisco MediaSense Developer Guide Release 11.0+
   private readonly endpoints = {
-    // Authentication endpoints (varies by MediaSense version)
+    // Authentication endpoints
     login: '/ora/authenticationService/authentication/login',
     logout: '/ora/authenticationService/authentication/logout',
-    // Java form-based authentication (j_security_check)
+    // Java form-based authentication (j_security_check) - primary method for 11.5
     loginForm: '/j_security_check',
-    // Alternative auth for some versions
+    // Alternative auth endpoints
     loginAlt: '/ora/authenticate',
     // Service info / health check
     serviceInfo: '/ora/serviceInfo',
     serviceInfoAlt: '/ora/queryService/query/serviceInfo',
-    // Query service
+    // Query service (MediaSense 11.5 uses this endpoint)
     querySessions: '/ora/queryService/query/sessions',
     querySessionById: '/ora/queryService/query/sessionBySessionId',
     // Event service
@@ -221,6 +224,7 @@ export class MediaSenseClientService {
 
     // Strategy 1: Java form-based authentication (j_security_check)
     // This is the standard Java servlet authentication endpoint
+    // For MediaSense 11.5, this is the recommended method
     try {
       const formData = new URLSearchParams();
       formData.append('j_username', this.config.apiKey);
@@ -232,6 +236,8 @@ export class MediaSenseClientService {
         {
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'User-Agent': 'MediaSense-API-Client/1.0',
           },
           maxRedirects: 0, // Don't follow redirects automatically
           validateStatus: (status) => status >= 200 && status < 400, // Accept 200, 302, etc.
@@ -246,6 +252,9 @@ export class MediaSenseClientService {
       const jsessionId = this.extractJSessionId(cookies);
 
       if (jsessionId) {
+        // For MediaSense 11.5, JSESSIONIDSSO is preferred
+        const cookieType = cookies.some(c => c.includes('JSESSIONIDSSO')) ? 'JSESSIONIDSSO' : 'JSESSIONID';
+        
         this.session = {
           sessionId: jsessionId,
           cookies,
@@ -256,10 +265,19 @@ export class MediaSenseClientService {
           requestId,
           duration: Date.now() - startTime,
           sessionIdMasked: this.maskSessionId(jsessionId),
+          cookieType,
           status: formResponse.status,
         });
 
         return this.session;
+      } else {
+        // Log detailed info for debugging MediaSense 11.5
+        this.msLogger.debug(`[${requestId}] j_security_check response details`, {
+          status: formResponse.status,
+          headers: Object.keys(formResponse.headers),
+          setCookieHeaders: cookies.length > 0 ? 'present' : 'missing',
+          location: formResponse.headers['location'],
+        });
       }
     } catch (error) {
       // j_security_check might not be available, continue to next strategy
@@ -269,6 +287,7 @@ export class MediaSenseClientService {
     }
 
     // Strategy 2: POST with Basic Auth header
+    // For MediaSense 11.5, try with both Basic Auth and JSON body
     try {
       const response = await this.axiosInstance.post(
         this.endpoints.login,
@@ -279,6 +298,8 @@ export class MediaSenseClientService {
         {
           headers: {
             Authorization: `Basic ${auth}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
           },
           validateStatus: () => true, // Don't throw on any status
         },
@@ -311,10 +332,13 @@ export class MediaSenseClientService {
 
           return this.session;
         } else {
-          this.msLogger.warn(`[${requestId}] Login returned 200 but no JSESSIONID cookie`, {
+          // For MediaSense 11.5, log detailed info about missing cookie
+          this.msLogger.warn(`[${requestId}] Login returned 200 but no JSESSIONIDSSO/JSESSIONID cookie`, {
             requestId,
             cookies: cookies.length,
+            cookieHeaders: cookies.length > 0 ? cookies.map(c => c.substring(0, 50)) : 'none',
             responseBody: this.truncateData(responseBody, 200),
+            note: 'MediaSense 11.5 may require different authentication method',
           });
         }
       } else if (hasError) {
@@ -355,6 +379,7 @@ export class MediaSenseClientService {
     ).toString('base64');
 
     // Strategy 1: Try Basic Auth on login endpoint with empty body
+    // For MediaSense 11.5, some versions may require empty body
     try {
       const loginResponse = await this.axiosInstance.post(
         this.endpoints.login,
@@ -362,6 +387,8 @@ export class MediaSenseClientService {
         {
           headers: {
             Authorization: `Basic ${auth}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
           },
           validateStatus: () => true,
         },
@@ -397,11 +424,13 @@ export class MediaSenseClientService {
       });
     }
 
-    // Strategy 2: Try Basic Auth on serviceInfo (may not return JSESSIONID)
+    // Strategy 2: Try Basic Auth on serviceInfo (may not return JSESSIONIDSSO)
+    // For MediaSense 11.5, this endpoint may establish session
     try {
       const response = await this.axiosInstance.get(this.endpoints.serviceInfo, {
         headers: {
           Authorization: `Basic ${auth}`,
+          'Accept': 'application/json',
         },
         validateStatus: () => true,
       });
@@ -487,12 +516,27 @@ export class MediaSenseClientService {
       await this.login();
     }
 
+    // For MediaSense 11.5, ensure proper headers for query endpoints
+    const defaultHeaders: Record<string, string> = {
+      ...this.getSessionHeaders(),
+    };
+    
+    // Add Content-Type for POST/PUT requests if not already set
+    if ((method === 'POST' || method === 'PUT') && body && !defaultHeaders['Content-Type']) {
+      defaultHeaders['Content-Type'] = 'application/json';
+    }
+    
+    // Ensure Accept header for query endpoints
+    if (path.includes('queryService')) {
+      defaultHeaders['Accept'] = 'application/json';
+    }
+
     const config: AxiosRequestConfig = {
       method,
       url: path,
       data: body,
       headers: {
-        ...this.getSessionHeaders(),
+        ...defaultHeaders,
         ...options?.headers,
       },
     };
@@ -782,11 +826,12 @@ export class MediaSenseClientService {
   /**
    * Query sessions from MediaSense
    * 
-   * Note: MediaSense query API varies by version. Common endpoints:
-   * - /ora/queryService/query/sessions (v10+)
-   * - /ora/recording/api/sessions (older versions)
+   * MediaSense 11.5.1.12001-8 uses:
+   * - Endpoint: /ora/queryService/query/sessions
+   * - Requires JSESSIONIDSSO cookie (not Basic Auth)
+   * - Uses sessionEndTime for filtering (more reliable than sessionStartTime)
    * 
-   * Adjust the request format based on your MediaSense version.
+   * Reference: Cisco MediaSense Developer Guide Release 11.0+
    */
   async querySessions(params: {
     startTime: string;
@@ -807,8 +852,8 @@ export class MediaSenseClientService {
       offset: params.offset,
     });
 
-    // Build query body based on MediaSense API format
-    // According to Cisco documentation, MediaSense API uses sessionEndTime for filtering
+    // Build query body for MediaSense 11.5
+    // According to Cisco documentation, MediaSense 11.5 uses sessionEndTime for filtering
     // Using only sessionEndTime is more reliable than sessionStartTime + sessionEndTime
     const queryBody: any = {
       queryType: 'sessions',
@@ -832,6 +877,14 @@ export class MediaSenseClientService {
         limit: params.limit || 100,
       },
     };
+    
+    // Log query details for MediaSense 11.5 debugging
+    this.msLogger.debug(`[${requestId}] MediaSense 11.5 query request`, {
+      endpoint: this.endpoints.querySessions,
+      dateRange: `${params.startTime} to ${params.endTime}`,
+      hasSession: !!this.session,
+      sessionType: this.session?.cookies.some(c => c.includes('JSESSIONIDSSO')) ? 'JSESSIONIDSSO' : 'JSESSIONID',
+    });
 
     // Add optional filters
     if (params.agentId) {
