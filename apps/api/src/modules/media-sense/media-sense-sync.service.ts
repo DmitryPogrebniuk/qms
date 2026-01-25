@@ -199,9 +199,23 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
 
       // Calculate time range with overlap window
       const now = new Date();
-      const fromTime = checkpoint.lastSyncTime 
-        ? new Date(new Date(checkpoint.lastSyncTime).getTime() - this.OVERLAP_WINDOW_MINUTES * 60 * 1000)
-        : new Date(now.getTime() - 24 * 60 * 60 * 1000); // Default: last 24 hours
+      let fromTime: Date;
+      
+      if (checkpoint.lastSyncTime) {
+        const lastSync = new Date(checkpoint.lastSyncTime);
+        // Check if lastSyncTime is in the future (system clock issue or bad data)
+        if (lastSync > now) {
+          this.msLogger.warn(`[${correlationId}] lastSyncTime is in the future, resetting to 7 days ago`, {
+            lastSyncTime: checkpoint.lastSyncTime,
+            now: now.toISOString(),
+          });
+          fromTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        } else {
+          fromTime = new Date(lastSync.getTime() - this.OVERLAP_WINDOW_MINUTES * 60 * 1000);
+        }
+      } else {
+        fromTime = new Date(now.getTime() - 24 * 60 * 60 * 1000); // Default: last 24 hours
+      }
 
       // Fetch sessions from MediaSense
       let page = 1;
@@ -522,26 +536,44 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
    */
   private normalizeSessionData(rawData: any, correlationId: string): MediaSenseSessionData[] {
     // Handle different MediaSense response formats
+    // According to Cisco documentation, MediaSense API returns:
+    // { responseCode: 2000, responseMessage: "Success...", responseBody: { sessions: [...] } }
     let sessions: any[] = [];
     
     if (Array.isArray(rawData)) {
+      // Direct array of sessions
       sessions = rawData;
     } else if (rawData && typeof rawData === 'object') {
-      // Try various possible response structures
-      sessions = rawData.sessions || 
-                 rawData.recordings || 
-                 rawData.results || 
-                 rawData.data?.sessions ||
-                 rawData.data?.recordings ||
-                 rawData.data?.results ||
-                 rawData.items ||
-                 (Array.isArray(rawData.data) ? rawData.data : []);
+      // MediaSense API response format: { responseBody: { sessions: [...] } }
+      // Try responseBody first (standard MediaSense format)
+      if (rawData.responseBody) {
+        sessions = rawData.responseBody.sessions || 
+                   rawData.responseBody.recordings || 
+                   rawData.responseBody.results ||
+                   (Array.isArray(rawData.responseBody) ? rawData.responseBody : []);
+      }
+      
+      // Fallback to other possible structures
+      if (!sessions || sessions.length === 0) {
+        sessions = rawData.sessions || 
+                   rawData.recordings || 
+                   rawData.results || 
+                   rawData.data?.sessions ||
+                   rawData.data?.recordings ||
+                   rawData.data?.results ||
+                   rawData.items ||
+                   (Array.isArray(rawData.data) ? rawData.data : []);
+      }
     }
     
     if (!Array.isArray(sessions) || sessions.length === 0) {
       this.msLogger.warn(`[${correlationId}] No sessions found in response`, {
         rawDataType: typeof rawData,
         isArray: Array.isArray(rawData),
+        hasResponseBody: Boolean(rawData?.responseBody),
+        responseBodyKeys: rawData?.responseBody && typeof rawData.responseBody === 'object' 
+          ? Object.keys(rawData.responseBody) 
+          : 'N/A',
         keys: rawData && typeof rawData === 'object' ? Object.keys(rawData) : 'N/A',
         sample: rawData && typeof rawData === 'object' 
           ? JSON.stringify(rawData).substring(0, 500) 

@@ -487,45 +487,52 @@ export class MediaSenseClientService {
 
         // Check for error in response body even if HTTP status is 200
         const responseData = response.data;
-        const hasError = responseData?.responseCode && 
-          (responseData.responseCode === 4021 || // Invalid session
-           responseData.responseCode !== 0);
         
-        if (hasError) {
-          const errorMessage = responseData?.responseMessage || 'API returned error';
-          this.msLogger.warn(`[${requestId}] API returned error in response body`, {
+        // MediaSense API format: { responseCode, responseMessage, responseBody }
+        // responseCode: 2000 = success, 4021 = invalid session, other = error
+        const responseCode = responseData?.responseCode;
+        const responseMessage = responseData?.responseMessage;
+        const responseBody = responseData?.responseBody;
+        
+        // Check for session error (4021)
+        if (responseCode === 4021) {
+          const errorMessage = responseMessage || 'Invalid session';
+          this.msLogger.warn(`[${requestId}] Invalid session detected (responseCode: 4021), attempting re-login`, {
             requestId,
             httpStatus: response.status,
-            responseCode: responseData?.responseCode,
             message: errorMessage,
           });
 
-          // If it's a session error, try to re-login
-          if (responseData?.responseCode === 4021) {
-            this.msLogger.info(`[${requestId}] Invalid session detected, attempting re-login`);
-            this.session = null; // Clear invalid session
-            await this.login(); // Re-login
+          this.session = null; // Clear invalid session
+          await this.login(); // Re-login
+          
+          // Retry the request once after re-login
+          try {
+            const retryResponse = await this.axiosInstance.request<T>({
+              ...config,
+              headers: {
+                ...config.headers,
+                ...this.getSessionHeaders(),
+              },
+            });
             
-            // Retry the request once after re-login
-            try {
-              const retryResponse = await this.axiosInstance.request<T>({
-                ...config,
-                headers: {
-                  ...config.headers,
-                  ...this.getSessionHeaders(),
-                },
-              });
-              
+            const retryData = retryResponse.data;
+            const retryCode = retryData?.responseCode;
+            
+            // If retry successful, extract data from responseBody
+            if (retryCode === 2000 || !retryCode) {
               return {
                 success: true,
-                data: retryResponse.data,
+                data: retryData?.responseBody || retryData,
                 statusCode: retryResponse.status,
                 requestId,
                 duration: Date.now() - startTime,
               };
-            } catch (retryError) {
-              // Fall through to return error
             }
+          } catch (retryError) {
+            this.msLogger.error(`[${requestId}] Retry after re-login failed`, {
+              error: (retryError as Error).message,
+            });
           }
 
           return {
@@ -536,10 +543,32 @@ export class MediaSenseClientService {
             duration: Date.now() - startTime,
           };
         }
+        
+        // Check for other errors (responseCode exists and is not 2000)
+        if (responseCode && responseCode !== 2000) {
+          const errorMessage = responseMessage || 'API returned error';
+          this.msLogger.warn(`[${requestId}] API returned error in response body`, {
+            requestId,
+            httpStatus: response.status,
+            responseCode,
+            message: errorMessage,
+          });
 
+          return {
+            success: false,
+            error: errorMessage,
+            statusCode: response.status,
+            requestId,
+            duration: Date.now() - startTime,
+          };
+        }
+
+        // Success: extract data from responseBody if present, otherwise use responseData directly
+        const data = responseBody !== undefined ? responseBody : responseData;
+        
         return {
           success: true,
-          data: responseData,
+          data: data,
           statusCode: response.status,
           requestId,
           duration: Date.now() - startTime,
@@ -763,12 +792,13 @@ export class MediaSenseClientService {
     });
 
     // Build query body based on MediaSense API format
-    // Note: This may need adjustment for your specific MediaSense version
+    // According to Cisco documentation, MediaSense API uses sessionEndTime for filtering
+    // Using only sessionEndTime is more reliable than sessionStartTime + sessionEndTime
     const queryBody: any = {
       queryType: 'sessions',
       conditions: [
         {
-          field: 'sessionStartTime',
+          field: 'sessionEndTime',
           operator: 'gte',
           value: params.startTime,
         },
