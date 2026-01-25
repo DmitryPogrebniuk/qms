@@ -26,32 +26,22 @@ log_warn() {
 cd /opt/qms || exit 1
 
 # Поточна дата мінус 7 днів для початку синхронізації
-# Використовуємо date команду, яка працює на Ubuntu
-if date --version > /dev/null 2>&1; then
-    # GNU date (Linux)
-    CURRENT_DATE=$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)
-    START_DATE=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%S.%3NZ)
-else
-    # BSD date (macOS) - fallback
-    CURRENT_DATE=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
-    START_DATE=$(date -u -v-7d +%Y-%m-%dT%H:%M:%S.000Z)
-fi
+# Використовуємо PostgreSQL для правильного розрахунку дати
+# Це гарантує правильну дату незалежно від системи
 
 log_info "Скидання checkpoint на поточні дати..."
-log_info "Початок синхронізації: $START_DATE"
-log_info "Поточна дата: $CURRENT_DATE"
 
-# Скинути checkpoint
-sudo docker compose -f infra/docker-compose.yml exec -T postgres psql -U qms_user -d qms << EOF
--- Скинути checkpoint для початку з поточних дат
+# Скинути checkpoint (використовуємо PostgreSQL для правильного розрахунку дати)
+sudo docker compose -f infra/docker-compose.yml exec -T postgres psql -U qms_user -d qms << 'EOF'
+-- Скинути checkpoint для початку з поточних дат (7 днів тому)
 UPDATE "SyncState" 
 SET 
   status = 'IDLE',
   checkpoint = jsonb_build_object(
     'backfillComplete', false,
-    'lastSyncTime', '$START_DATE'
+    'lastSyncTime', (NOW() - INTERVAL '7 days')::text
   ),
-  "watermarkTime" = NULL,
+  "watermarkTime" = NOW() - INTERVAL '7 days',
   "errorMessage" = NULL,
   "totalFetched" = 0,
   "totalCreated" = 0,
@@ -63,7 +53,8 @@ SELECT
     "syncType",
     status,
     (checkpoint::jsonb)->>'backfillComplete' as backfill_complete,
-    (checkpoint::jsonb)->>'lastSyncTime' as last_sync
+    (checkpoint::jsonb)->>'lastSyncTime' as last_sync,
+    "watermarkTime"
 FROM "SyncState" 
 WHERE "syncType" = 'mediasense_recordings';
 EOF
