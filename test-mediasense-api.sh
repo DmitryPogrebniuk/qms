@@ -58,41 +58,82 @@ log_info "  URL: $API_URL"
 log_info "  User: $API_KEY"
 log_info ""
 
-# Тест 1: Автентифікація через login endpoint (для отримання JSESSIONID)
-log_info "1. Тест автентифікації через login endpoint..."
+# Тест 1: Автентифікація через j_security_check (Java form-based auth)
+log_info "1. Тест автентифікації через j_security_check (Java form-based)..."
 
-# Спробувати POST login з Basic Auth
-LOGIN_RESPONSE=$(curl -k -s -w "\n%{http_code}" -u "$API_KEY:$API_SECRET" \
-    -X POST "$API_URL/ora/authenticationService/authentication/login" \
-    -H "Content-Type: application/json" \
-    -d '{}' \
-    -c /tmp/mediasense_cookies.txt)
+# Спробувати POST до j_security_check з form data
+JSECURITY_RESPONSE=$(curl -k -s -w "\n%{http_code}" \
+    -X POST "$API_URL/j_security_check" \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    -d "j_username=$API_KEY&j_password=$API_SECRET" \
+    -c /tmp/mediasense_cookies.txt \
+    -L)  # Follow redirects
 
-LOGIN_HTTP_CODE=$(echo "$LOGIN_RESPONSE" | tail -1)
-LOGIN_BODY=$(echo "$LOGIN_RESPONSE" | sed '$d')
+JSECURITY_HTTP_CODE=$(echo "$JSECURITY_RESPONSE" | tail -1)
+JSECURITY_BODY=$(echo "$JSECURITY_RESPONSE" | sed '$d')
 
 # Перевірити чи є JSESSIONID в cookies
 JSESSIONID=$(grep -i "JSESSIONID" /tmp/mediasense_cookies.txt 2>/dev/null | awk '{print $7}' || echo "")
 
 if [ -n "$JSESSIONID" ]; then
-    log_info "✓ JSESSIONID отримано: ${JSESSIONID:0:20}..."
+    log_info "✓ JSESSIONID отримано через j_security_check: ${JSESSIONID:0:20}..."
     COOKIE_HEADER="Cookie: JSESSIONID=$JSESSIONID"
+    JSESSIONID_FOUND=true
 else
-    log_warn "⚠ JSESSIONID не знайдено в cookies"
-    COOKIE_HEADER=""
+    log_warn "⚠ JSESSIONID не знайдено в cookies після j_security_check"
+    JSESSIONID_FOUND=false
+fi
+
+# Перевірити body на помилки
+if echo "$JSECURITY_BODY" | grep -q "responseCode.*4021\|Invalid session\|login\|error"; then
+    log_warn "⚠ Можлива помилка в відповіді j_security_check"
+    echo "$JSECURITY_BODY" | head -5 | sed 's/^/    /'
+elif [ "$JSECURITY_HTTP_CODE" = "200" ] || [ "$JSECURITY_HTTP_CODE" = "302" ]; then
+    log_info "✓ j_security_check повернув HTTP $JSECURITY_HTTP_CODE"
+    if [ "$JSECURITY_HTTP_CODE" = "302" ]; then
+        log_info "  (302 redirect - нормальна поведінка для успішної автентифікації)"
+    fi
+else
+    log_warn "⚠ j_security_check повернув HTTP $JSECURITY_HTTP_CODE"
+fi
+
+echo ""
+
+# Тест 1.1: Альтернативний спосіб - REST API login endpoint
+log_info "1.1. Тест автентифікації через REST API login endpoint..."
+
+# Спробувати POST login з Basic Auth
+LOGIN_RESPONSE=$(curl -k -s -w "\n%{http_code}" -u "$API_KEY:$API_SECRET" \
+    -X POST "$API_URL/ora/authenticationService/authentication/login" \
+    -H "Content-Type: application/json" \
+    -d "{\"username\":\"$API_KEY\",\"password\":\"$API_SECRET\"}" \
+    -c /tmp/mediasense_cookies_rest.txt)
+
+LOGIN_HTTP_CODE=$(echo "$LOGIN_RESPONSE" | tail -1)
+LOGIN_BODY=$(echo "$LOGIN_RESPONSE" | sed '$d')
+
+# Перевірити чи є JSESSIONID в cookies (якщо не знайдено через j_security_check)
+if [ "$JSESSIONID_FOUND" = false ]; then
+    JSESSIONID_REST=$(grep -i "JSESSIONID" /tmp/mediasense_cookies_rest.txt 2>/dev/null | awk '{print $7}' || echo "")
+    if [ -n "$JSESSIONID_REST" ]; then
+        log_info "✓ JSESSIONID отримано через REST API: ${JSESSIONID_REST:0:20}..."
+        JSESSIONID="$JSESSIONID_REST"
+        COOKIE_HEADER="Cookie: JSESSIONID=$JSESSIONID"
+        JSESSIONID_FOUND=true
+    fi
 fi
 
 # Перевірити body на помилки
 if echo "$LOGIN_BODY" | grep -q "responseCode.*4021\|Invalid session"; then
-    log_error "✗ Помилка в відповіді: Invalid session"
+    log_warn "⚠ REST API login повернув помилку: Invalid session"
     echo "$LOGIN_BODY" | head -5 | sed 's/^/    /'
 elif [ "$LOGIN_HTTP_CODE" = "200" ] || [ "$LOGIN_HTTP_CODE" = "201" ]; then
-    log_info "✓ Login endpoint повернув HTTP $LOGIN_HTTP_CODE"
-    if [ -z "$JSESSIONID" ]; then
+    log_info "✓ REST API login повернув HTTP $LOGIN_HTTP_CODE"
+    if [ "$JSESSIONID_FOUND" = false ]; then
         log_warn "  Але JSESSIONID не знайдено - можливо потрібен інший формат запиту"
     fi
 else
-    log_warn "⚠ Login endpoint повернув HTTP $LOGIN_HTTP_CODE"
+    log_warn "⚠ REST API login повернув HTTP $LOGIN_HTTP_CODE"
 fi
 
 echo ""
@@ -157,13 +198,15 @@ EOF
 )
 
 # Використовувати JSESSIONID якщо є, інакше Basic Auth
-if [ -n "$JSESSIONID" ]; then
+if [ "$JSESSIONID_FOUND" = true ] && [ -n "$JSESSIONID" ]; then
+    log_info "  Використовую JSESSIONID cookie для запиту"
     QUERY_RESPONSE=$(curl -k -s -w "\n%{http_code}" \
         -X POST "$API_URL/ora/queryService/query/sessions" \
         -H "Content-Type: application/json" \
         -H "$COOKIE_HEADER" \
         -d "$QUERY_BODY")
 else
+    log_warn "  JSESSIONID не знайдено, використовую Basic Auth (може не працювати)"
     QUERY_RESPONSE=$(curl -k -s -w "\n%{http_code}" -u "$API_KEY:$API_SECRET" \
         -X POST "$API_URL/ora/queryService/query/sessions" \
         -H "Content-Type: application/json" \
