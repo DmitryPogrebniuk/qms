@@ -57,11 +57,85 @@ log_info "  URL: $API_URL"
 log_info "  User: $API_KEY"
 log_info ""
 
-# Тест 1: Запит сесій з Basic Auth
-log_info "1. Тест запиту сесій (POST з Basic Auth)..."
+# Крок 1: Логін для отримання JSESSIONID
+log_info "1. Логін для отримання JSESSIONID..."
 
-START_DATE=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%S.000Z 2>/dev/null || date -u -v-7d +%Y-%m-%dT%H:%M:%S.000Z)
-END_DATE=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+JSESSIONID=""
+COOKIE_JAR="/tmp/mediasense_cookies.txt"
+rm -f "$COOKIE_JAR"
+
+# Спробувати різні методи логіну
+log_info "  Спробу 1: POST /ora/authenticationService/authentication/login з Basic Auth..."
+
+LOGIN_RESPONSE=$(curl -k -s -w "\n%{http_code}" -u "$API_KEY:$API_SECRET" \
+    -X POST "$API_URL/ora/authenticationService/authentication/login" \
+    -H "Content-Type: application/json" \
+    -d "{\"username\":\"$API_KEY\",\"password\":\"$API_SECRET\"}" \
+    -c "$COOKIE_JAR" \
+    -b "$COOKIE_JAR")
+
+LOGIN_HTTP_CODE=$(echo "$LOGIN_RESPONSE" | tail -1)
+LOGIN_BODY=$(echo "$LOGIN_RESPONSE" | sed '$d')
+
+# Перевірити cookies
+if [ -f "$COOKIE_JAR" ]; then
+    JSESSIONID=$(grep -i "JSESSIONID" "$COOKIE_JAR" | awk '{print $7}' | head -1)
+    JSESSIONIDSSO=$(grep -i "JSESSIONIDSSO" "$COOKIE_JAR" | awk '{print $7}' | head -1)
+    
+    if [ -n "$JSESSIONIDSSO" ]; then
+        JSESSIONID="$JSESSIONIDSSO"
+        log_info "  ✓ Отримано JSESSIONIDSSO: ${JSESSIONID:0:20}..."
+    elif [ -n "$JSESSIONID" ]; then
+        log_info "  ✓ Отримано JSESSIONID: ${JSESSIONID:0:20}..."
+    fi
+fi
+
+# Якщо не отримали, спробувати GET /ora/serviceInfo
+if [ -z "$JSESSIONID" ]; then
+    log_info "  Спробу 2: GET /ora/serviceInfo з Basic Auth..."
+    
+    SERVICE_RESPONSE=$(curl -k -s -w "\n%{http_code}" -u "$API_KEY:$API_SECRET" \
+        -X GET "$API_URL/ora/serviceInfo" \
+        -c "$COOKIE_JAR" \
+        -b "$COOKIE_JAR")
+    
+    if [ -f "$COOKIE_JAR" ]; then
+        JSESSIONID=$(grep -i "JSESSIONID" "$COOKIE_JAR" | awk '{print $7}' | head -1)
+        JSESSIONIDSSO=$(grep -i "JSESSIONIDSSO" "$COOKIE_JAR" | awk '{print $7}' | head -1)
+        
+        if [ -n "$JSESSIONIDSSO" ]; then
+            JSESSIONID="$JSESSIONIDSSO"
+            log_info "  ✓ Отримано JSESSIONIDSSO: ${JSESSIONID:0:20}..."
+        elif [ -n "$JSESSIONID" ]; then
+            log_info "  ✓ Отримано JSESSIONID: ${JSESSIONID:0:20}..."
+        fi
+    fi
+fi
+
+if [ -z "$JSESSIONID" ]; then
+    log_warn "  ⚠ JSESSIONID не отримано, використовуємо Basic Auth для запиту"
+fi
+
+echo ""
+
+# Тест 2: Запит сесій
+log_info "2. Тест запиту сесій..."
+
+# Використовуємо минулі дати (7 днів тому до зараз)
+# Перевіряємо, чи дата не в майбутньому
+CURRENT_YEAR=$(date -u +%Y)
+if [ "$CURRENT_YEAR" -gt 2025 ]; then
+    # Якщо поточна дата в майбутньому (проблема з системним часом), використовуємо фіксовану дату
+    log_warn "  ⚠ Системна дата в майбутньому, використовуємо фіксовані дати"
+    END_DATE="2025-01-25T00:00:00.000Z"
+    START_DATE="2025-01-18T00:00:00.000Z"
+else
+    # Нормальний розрахунок
+    START_DATE=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%S.000Z 2>/dev/null || date -u -v-7d +%Y-%m-%dT%H:%M:%S.000Z)
+    END_DATE=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+fi
+
+log_info "  Діапазон: $START_DATE до $END_DATE"
 
 QUERY_BODY=$(cat <<EOF
 {
@@ -86,16 +160,37 @@ QUERY_BODY=$(cat <<EOF
 EOF
 )
 
-QUERY_RESPONSE=$(curl -k -s -w "\n%{http_code}" -u "$API_KEY:$API_SECRET" \
+# Формуємо заголовки
+QUERY_HEADERS=(
+    "-H" "Content-Type: application/json"
+)
+
+if [ -n "$JSESSIONID" ]; then
+    # Використовуємо JSESSIONID cookie
+    COOKIE_NAME="JSESSIONID"
+    if echo "$JSESSIONID" | grep -q "SSO"; then
+        COOKIE_NAME="JSESSIONIDSSO"
+    fi
+    QUERY_HEADERS+=("-H" "Cookie: ${COOKIE_NAME}=${JSESSIONID}")
+    log_info "  Використовуємо ${COOKIE_NAME} cookie"
+else
+    # Fallback до Basic Auth
+    QUERY_HEADERS+=("-u" "$API_KEY:$API_SECRET")
+    log_info "  Використовуємо Basic Auth (немає JSESSIONID)"
+fi
+
+QUERY_RESPONSE=$(curl -k -s -w "\n%{http_code}" \
+    "${QUERY_HEADERS[@]}" \
     -X POST "$API_URL/ora/queryService/query/sessions" \
-    -H "Content-Type: application/json" \
-    -d "$QUERY_BODY")
+    -d "$QUERY_BODY" \
+    -b "$COOKIE_JAR")
 
 QUERY_HTTP_CODE=$(echo "$QUERY_RESPONSE" | tail -1)
 QUERY_BODY_RESPONSE=$(echo "$QUERY_RESPONSE" | sed '$d')
 
-log_info "  Запит: POST /ora/queryService/query/sessions"
-log_info "  Діапазон: $START_DATE до $END_DATE"
+# Очистити cookie jar
+rm -f "$COOKIE_JAR"
+
 log_info "  HTTP Status: $QUERY_HTTP_CODE"
 echo ""
 
