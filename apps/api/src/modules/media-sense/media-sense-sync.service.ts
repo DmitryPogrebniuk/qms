@@ -500,10 +500,23 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
       });
 
       if (!response.success || !response.data) {
-        this.msLogger.warn(`[${correlationId}] No sessions returned from MediaSense`, {
-          response: response.error,
-          statusCode: response.statusCode,
-        });
+        // Check if error is due to invalid session (4021)
+        if (response.error?.includes('4021') || response.error?.includes('Invalid session')) {
+          this.msLogger.error(`[${correlationId}] MediaSense returned Invalid session (4021) - JSESSIONIDSSO required`, {
+            error: response.error,
+            statusCode: response.statusCode,
+            note: 'MediaSense 11.5 query endpoints require JSESSIONIDSSO cookie. Basic Auth may not work for query endpoints.',
+            recommendation: 'Check MediaSense server configuration or use alternative method to obtain JSESSIONIDSSO',
+          });
+        } else {
+          this.msLogger.warn(`[${correlationId}] No sessions returned from MediaSense`, {
+            error: response.error,
+            statusCode: response.statusCode,
+            fromTime: fromTime.toISOString(),
+            toTime: toTime.toISOString(),
+            page,
+          });
+        }
         return [];
       }
 
