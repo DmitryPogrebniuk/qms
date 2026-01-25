@@ -488,9 +488,23 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
       if (!response.success || !response.data) {
         this.msLogger.warn(`[${correlationId}] No sessions returned from MediaSense`, {
           response: response.error,
+          statusCode: response.statusCode,
         });
         return [];
       }
+
+      // Log raw response structure for debugging
+      this.msLogger.debug(`[${correlationId}] MediaSense response structure`, {
+        isArray: Array.isArray(response.data),
+        hasSessions: Boolean((response.data as any)?.sessions),
+        hasRecordings: Boolean((response.data as any)?.recordings),
+        hasResults: Boolean((response.data as any)?.results),
+        hasData: Boolean((response.data as any)?.data),
+        hasItems: Boolean((response.data as any)?.items),
+        keys: typeof response.data === 'object' && response.data !== null 
+          ? Object.keys(response.data) 
+          : 'not an object',
+      });
 
       // Map MediaSense response to our normalized format
       return this.normalizeSessionData(response.data, correlationId);
@@ -508,7 +522,33 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
    */
   private normalizeSessionData(rawData: any, correlationId: string): MediaSenseSessionData[] {
     // Handle different MediaSense response formats
-    const sessions = Array.isArray(rawData) ? rawData : rawData?.sessions || rawData?.recordings || [];
+    let sessions: any[] = [];
+    
+    if (Array.isArray(rawData)) {
+      sessions = rawData;
+    } else if (rawData && typeof rawData === 'object') {
+      // Try various possible response structures
+      sessions = rawData.sessions || 
+                 rawData.recordings || 
+                 rawData.results || 
+                 rawData.data?.sessions ||
+                 rawData.data?.recordings ||
+                 rawData.data?.results ||
+                 rawData.items ||
+                 (Array.isArray(rawData.data) ? rawData.data : []);
+    }
+    
+    if (!Array.isArray(sessions) || sessions.length === 0) {
+      this.msLogger.warn(`[${correlationId}] No sessions found in response`, {
+        rawDataType: typeof rawData,
+        isArray: Array.isArray(rawData),
+        keys: rawData && typeof rawData === 'object' ? Object.keys(rawData) : 'N/A',
+        sample: rawData && typeof rawData === 'object' 
+          ? JSON.stringify(rawData).substring(0, 500) 
+          : String(rawData).substring(0, 500),
+      });
+      return [];
+    }
     
     return sessions.map((raw: any) => {
       try {
