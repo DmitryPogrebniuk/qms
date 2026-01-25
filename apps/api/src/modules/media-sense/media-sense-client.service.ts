@@ -11,11 +11,18 @@ import { MediaSenseLogger } from './media-sense-logger.service';
  * MediaSense API typically uses:
  * - Port 8440 for HTTPS API
  * - /ora/ prefix for API paths
- * - JSESSIONIDSSO cookie for session authentication (MediaSense 11.5+)
- * - JSESSIONID cookie as fallback
+ * - JSESSIONID cookie for session authentication (MediaSense 11.5 - from reverse engineering)
+ * - JSESSIONIDSSO cookie as fallback (for some versions)
+ * 
+ * Real API format discovered via reverse engineering:
+ * - Endpoint: /ora/queryService/query/getSessions (not /sessions)
+ * - Request format: { requestParameters: [{ fieldName, fieldConditions, ... }] }
+ * - Uses timestamps in milliseconds (not ISO strings)
+ * - Response: { responseCode: 2000, responseMessage: "Success...", responseBody: { sessions: [...] } }
  * 
  * Reference: Cisco MediaSense Developer Guide Release 11.0+
  * Tested with: MediaSense 11.5.1.12001-8
+ * Reverse engineered from: Web interface HAR analysis
  */
 
 export interface MediaSenseClientConfig {
@@ -1343,15 +1350,16 @@ export class MediaSenseClientService {
 
     const headers: Record<string, string> = {};
 
-    // Always try to use JSESSIONIDSSO or JSESSIONID cookie first
+    // MediaSense 11.5 uses JSESSIONID (from reverse engineering)
+    // Try JSESSIONID first (real format), then JSESSIONIDSSO as fallback
     const jsessionCookie = this.session.cookies.find(c => 
-      c.includes('JSESSIONIDSSO') || c.includes('JSESSIONID')
+      c.includes('JSESSIONID')
     );
     if (jsessionCookie) {
-      // Extract JSESSIONIDSSO or JSESSIONID value
+      // Extract JSESSIONID value (MediaSense 11.5 uses JSESSIONID, not JSESSIONIDSSO)
       const jsessionId = this.extractJSessionId([jsessionCookie]);
       if (jsessionId) {
-        // Use JSESSIONIDSSO if available, otherwise JSESSIONID
+        // Use JSESSIONID (MediaSense 11.5 format from reverse engineering)
         const cookieName = jsessionCookie.includes('JSESSIONIDSSO') ? 'JSESSIONIDSSO' : 'JSESSIONID';
         headers['Cookie'] = `${cookieName}=${jsessionId}`;
         // Also include Basic Auth as fallback (some endpoints may need both)
