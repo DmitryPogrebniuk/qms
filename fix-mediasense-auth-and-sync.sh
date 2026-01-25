@@ -34,6 +34,7 @@ log_info "Крок 1: Скидання checkpoint на поточні дати (
 
 sudo docker compose -f infra/docker-compose.yml exec -T postgres psql -U qms_user -d qms << 'EOF'
 -- Скинути checkpoint для початку з поточних дат (7 днів тому)
+-- Використовуємо PostgreSQL для правильного розрахунку дати
 UPDATE "SyncState" 
 SET 
   status = 'IDLE',
@@ -49,6 +50,35 @@ SET
   "lastSyncedAt" = NOW()
 WHERE "syncType" = 'mediasense_recordings';
 
+-- Перевірити, що дата не в майбутньому
+DO $$
+DECLARE
+    last_sync_text TEXT;
+    last_sync_timestamp TIMESTAMP;
+    current_time TIMESTAMP;
+BEGIN
+    SELECT (checkpoint::jsonb)->>'lastSyncTime' INTO last_sync_text
+    FROM "SyncState" 
+    WHERE "syncType" = 'mediasense_recordings';
+    
+    IF last_sync_text IS NOT NULL THEN
+        last_sync_timestamp := last_sync_text::timestamp;
+        current_time := NOW();
+        
+        -- Якщо lastSyncTime в майбутньому, скинути на 7 днів тому
+        IF last_sync_timestamp > current_time THEN
+            UPDATE "SyncState" 
+            SET 
+              checkpoint = jsonb_build_object(
+                'backfillComplete', false,
+                'lastSyncTime', (current_time - INTERVAL '7 days')::text
+              ),
+              "watermarkTime" = current_time - INTERVAL '7 days'
+            WHERE "syncType" = 'mediasense_recordings';
+        END IF;
+    END IF;
+END $$;
+
 -- Показати результат
 SELECT 
     "syncType",
@@ -56,7 +86,11 @@ SELECT
     (checkpoint::jsonb)->>'backfillComplete' as backfill_complete,
     (checkpoint::jsonb)->>'lastSyncTime' as last_sync,
     "watermarkTime",
-    "lastSyncedAt"
+    "lastSyncedAt",
+    CASE 
+        WHEN ((checkpoint::jsonb)->>'lastSyncTime')::timestamp > NOW() THEN 'FUTURE_DATE'
+        ELSE 'OK'
+    END as date_check
 FROM "SyncState" 
 WHERE "syncType" = 'mediasense_recordings';
 EOF
@@ -85,9 +119,9 @@ sudo docker compose -f infra/docker-compose.yml exec -T postgres psql -U qms_use
 SELECT 
     "syncType",
     status,
-    (checkpoint::jsonb)->>'lastSyncTime')::timestamp as last_sync_timestamp,
+    ((checkpoint::jsonb)->>'lastSyncTime')::timestamp as last_sync_timestamp,
     NOW() as current_timestamp,
-    EXTRACT(EPOCH FROM (NOW() - ((checkpoint::jsonb)->>'lastSyncTime')::timestamp)) / 86400 as days_ago
+    EXTRACT(EPOCH FROM (NOW() - (((checkpoint::jsonb)->>'lastSyncTime')::timestamp))) / 86400 as days_ago
 FROM "SyncState" 
 WHERE "syncType" = 'mediasense_recordings';
 EOF
