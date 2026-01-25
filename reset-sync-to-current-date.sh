@@ -26,8 +26,16 @@ log_warn() {
 cd /opt/qms || exit 1
 
 # Поточна дата мінус 7 днів для початку синхронізації
-CURRENT_DATE=$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)
-START_DATE=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%S.%3NZ)
+# Використовуємо date команду, яка працює на Ubuntu
+if date --version > /dev/null 2>&1; then
+    # GNU date (Linux)
+    CURRENT_DATE=$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)
+    START_DATE=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%S.%3NZ)
+else
+    # BSD date (macOS) - fallback
+    CURRENT_DATE=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+    START_DATE=$(date -u -v-7d +%Y-%m-%dT%H:%M:%S.000Z)
+fi
 
 log_info "Скидання checkpoint на поточні дати..."
 log_info "Початок синхронізації: $START_DATE"
