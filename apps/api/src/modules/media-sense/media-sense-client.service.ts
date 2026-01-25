@@ -238,7 +238,11 @@ export class MediaSenseClientService {
         },
       );
 
-      const cookies = formResponse.headers['set-cookie'] || [];
+      // Axios in Node.js returns Set-Cookie headers as array or string
+      const setCookieHeaders = formResponse.headers['set-cookie'] || [];
+      const cookies = Array.isArray(setCookieHeaders) 
+        ? setCookieHeaders 
+        : [setCookieHeaders].filter(Boolean);
       const jsessionId = this.extractJSessionId(cookies);
 
       if (jsessionId) {
@@ -285,7 +289,11 @@ export class MediaSenseClientService {
       const hasError = responseBody?.responseCode && responseBody.responseCode !== 0;
       
       if ((response.status === 200 || response.status === 201) && !hasError) {
-        const cookies = response.headers['set-cookie'] || [];
+        // Axios in Node.js returns Set-Cookie headers as array or string
+        const setCookieHeaders = response.headers['set-cookie'] || [];
+        const cookies = Array.isArray(setCookieHeaders) 
+          ? setCookieHeaders 
+          : [setCookieHeaders].filter(Boolean);
         const jsessionId = this.extractJSessionId(cookies);
 
         if (jsessionId) {
@@ -360,7 +368,11 @@ export class MediaSenseClientService {
       );
 
       if (loginResponse.status === 200 || loginResponse.status === 201) {
-        const cookies = loginResponse.headers['set-cookie'] || [];
+        // Axios in Node.js returns Set-Cookie headers as array or string
+        const setCookieHeaders = loginResponse.headers['set-cookie'] || [];
+        const cookies = Array.isArray(setCookieHeaders) 
+          ? setCookieHeaders 
+          : [setCookieHeaders].filter(Boolean);
         const jsessionId = this.extractJSessionId(cookies);
 
         if (jsessionId) {
@@ -395,7 +407,11 @@ export class MediaSenseClientService {
       });
 
       if (response.status === 200 || response.status === 201) {
-        const cookies = response.headers['set-cookie'] || [];
+        // Axios in Node.js returns Set-Cookie headers as array or string
+        const setCookieHeaders = response.headers['set-cookie'] || [];
+        const cookies = Array.isArray(setCookieHeaders) 
+          ? setCookieHeaders 
+          : [setCookieHeaders].filter(Boolean);
         const jsessionId = this.extractJSessionId(cookies);
 
         // If we got JSESSIONID, use it
@@ -1044,16 +1060,26 @@ export class MediaSenseClientService {
   // ==================== Helper Methods ====================
 
   private extractJSessionId(cookies: string[]): string | null {
+    if (!cookies || cookies.length === 0) {
+      return null;
+    }
+
     for (const cookie of cookies) {
-      // MediaSense may use JSESSIONIDSSO (Single Sign-On cookie)
-      const ssoMatch = cookie.match(/JSESSIONIDSSO=([^;]+)/i);
-      if (ssoMatch) {
-        return ssoMatch[1];
+      if (!cookie || typeof cookie !== 'string') {
+        continue;
       }
+
+      // MediaSense may use JSESSIONIDSSO (Single Sign-On cookie)
+      // Try JSESSIONIDSSO first (Cisco-specific)
+      const ssoMatch = cookie.match(/JSESSIONIDSSO\s*=\s*([^;\s,]+)/i);
+      if (ssoMatch && ssoMatch[1]) {
+        return ssoMatch[1].trim();
+      }
+      
       // Fallback to standard JSESSIONID
-      const match = cookie.match(/JSESSIONID=([^;]+)/i);
-      if (match) {
-        return match[1];
+      const match = cookie.match(/JSESSIONID\s*=\s*([^;\s,]+)/i);
+      if (match && match[1]) {
+        return match[1].trim();
       }
     }
     return null;
