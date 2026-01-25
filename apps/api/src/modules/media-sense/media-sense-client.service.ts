@@ -815,50 +815,143 @@ export class MediaSenseClientService {
     }
 
     // Step 3: Test API access (service info or simple query)
+    // For MediaSense 11.5, try endpoints in order of reliability
     try {
       const apiStart = Date.now();
-      let apiResponse = await this.request('GET', this.endpoints.serviceInfo);
+      let apiResponse: MediaSenseResponse<any> | null = null;
+      let lastError: string | null = null;
 
-      if (!apiResponse.success) {
-        // Try alternative endpoint
-        apiResponse = await this.request('GET', this.endpoints.serviceInfoAlt);
-      }
-
-      if (!apiResponse.success) {
-        // Try query endpoint with minimal request
-        apiResponse = await this.request('POST', this.endpoints.querySessions, {
-          queryType: 'sessions',
-          startTime: new Date(Date.now() - 60000).toISOString(),
-          endTime: new Date().toISOString(),
-          maxResults: 1,
+      // Try 1: GET /ora/serviceInfo (most reliable for MediaSense 11.5)
+      try {
+        apiResponse = await this.request('GET', this.endpoints.serviceInfo);
+        if (apiResponse.success) {
+          details.push({
+            step: 'API Access',
+            status: 'ok',
+            message: 'API responding correctly via /ora/serviceInfo',
+            duration: Date.now() - apiStart,
+          });
+        } else {
+          lastError = apiResponse.error || 'Unknown error';
+        }
+      } catch (error) {
+        lastError = (error as Error).message;
+        this.msLogger.debug('serviceInfo endpoint failed, trying alternatives', {
+          error: lastError,
         });
       }
 
-      if (apiResponse.success) {
-        details.push({
-          step: 'API Access',
-          status: 'ok',
-          message: 'API responding correctly',
-          duration: Date.now() - apiStart,
-        });
-      } else {
+      // Try 2: Alternative serviceInfo endpoint (if first failed)
+      if (!apiResponse?.success) {
+        try {
+          apiResponse = await this.request('GET', this.endpoints.serviceInfoAlt);
+          if (apiResponse.success) {
+            details.push({
+              step: 'API Access',
+              status: 'ok',
+              message: 'API responding correctly via alternative endpoint',
+              duration: Date.now() - apiStart,
+            });
+          } else {
+            lastError = apiResponse.error || lastError || 'Unknown error';
+          }
+        } catch (error) {
+          // Ignore 404 for alternative endpoint - it might not exist in all versions
+          const axiosError = error as AxiosError;
+          if (axiosError.response?.status !== 404) {
+            lastError = (error as Error).message;
+          }
+        }
+      }
+
+      // Try 3: Query endpoint (only if we have JSESSIONIDSSO or want to test)
+      // Skip this for MediaSense 11.5 if we don't have JSESSIONIDSSO, as it will fail with 4021
+      if (!apiResponse?.success && this.session?.cookies?.some(c => c.includes('JSESSIONID'))) {
+        try {
+          // Use proper query format for MediaSense 11.5
+          apiResponse = await this.request('POST', this.endpoints.querySessions, {
+            queryType: 'sessions',
+            conditions: [
+              {
+                field: 'sessionEndTime',
+                operator: 'gte',
+                value: new Date(Date.now() - 60000).toISOString(),
+              },
+              {
+                field: 'sessionEndTime',
+                operator: 'lte',
+                value: new Date().toISOString(),
+              },
+            ],
+            paging: {
+              offset: 0,
+              limit: 1,
+            },
+          });
+          
+          if (apiResponse.success) {
+            details.push({
+              step: 'API Access',
+              status: 'ok',
+              message: 'Query endpoint responding correctly',
+              duration: Date.now() - apiStart,
+            });
+          } else {
+            lastError = apiResponse.error || lastError || 'Unknown error';
+          }
+        } catch (error) {
+          // Ignore errors for query endpoint - it requires JSESSIONIDSSO which we might not have
+          const axiosError = error as AxiosError;
+          if (axiosError.response?.status === 404) {
+            this.msLogger.debug('Query endpoint not found (404) - may not be available in this MediaSense version');
+          } else if (axiosError.response?.status !== 4021) {
+            lastError = (error as Error).message;
+          }
+        }
+      }
+
+      // If no endpoint worked, report error but don't fail completely if auth worked
+      if (!apiResponse?.success) {
+        const errorMessage = lastError || 'API request failed';
         details.push({
           step: 'API Access',
           status: 'error',
-          message: apiResponse.error || 'API request failed',
+          message: errorMessage,
         });
 
-        // Still consider partial success if auth worked
-        recommendations.push(
-          'API endpoints may differ based on MediaSense version - check Developer Guide',
-        );
+        // For MediaSense 11.5, if we don't have JSESSIONIDSSO, query endpoints will fail
+        if (errorMessage.includes('4021') || errorMessage.includes('Invalid session')) {
+          recommendations.push(
+            'Query endpoints require JSESSIONIDSSO cookie. MediaSense 11.5 may not provide cookies via API authentication.',
+          );
+          recommendations.push(
+            'Consider using Basic Auth for serviceInfo endpoint, or check MediaSense server configuration for cookie-based authentication.',
+          );
+        } else if (errorMessage.includes('404')) {
+          recommendations.push(
+            'Endpoint not found (404). This endpoint may not be available in MediaSense 11.5.1.12001-8.',
+          );
+          recommendations.push(
+            'Try using /ora/serviceInfo endpoint instead, or check MediaSense Developer Guide for correct endpoints.',
+          );
+        } else {
+          recommendations.push(
+            'API endpoints may differ based on MediaSense version - check Developer Guide',
+          );
+        }
       }
     } catch (error) {
+      const errorMessage = (error as Error).message;
       details.push({
         step: 'API Access',
         status: 'error',
-        message: (error as Error).message,
+        message: errorMessage,
       });
+      
+      // Add specific recommendations for common errors
+      if (errorMessage.includes('404')) {
+        recommendations.push('Endpoint not found - check MediaSense version and available endpoints');
+      }
     }
 
     // Add NAT warning
