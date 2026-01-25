@@ -49,12 +49,25 @@ echo ""
 # ============================================
 log_step "Крок 1: Виправлення enum SyncStatus (додавання PARTIAL)..."
 
-if sudo docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U qms_user -d qms -c "ALTER TYPE \"SyncStatus\" ADD VALUE 'PARTIAL';" 2>/dev/null; then
-    log_info "✓ Значення PARTIAL додано до enum SyncStatus"
-elif sudo docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U qms -d qms -c "ALTER TYPE \"SyncStatus\" ADD VALUE 'PARTIAL';" 2>/dev/null; then
-    log_info "✓ Значення PARTIAL додано до enum SyncStatus (qms:qms)"
+# Перевірити, чи PARTIAL вже існує
+PARTIAL_EXISTS=$(sudo docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U qms_user -d qms -t -c "
+    SELECT COUNT(*) 
+    FROM pg_enum 
+    WHERE enumlabel = 'PARTIAL' 
+    AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'SyncStatus');
+" 2>/dev/null | tr -d ' ' || echo "0")
+
+if [ "$PARTIAL_EXISTS" = "0" ] || [ -z "$PARTIAL_EXISTS" ]; then
+    # Спробувати додати з qms_user
+    if sudo docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U qms_user -d qms -c "ALTER TYPE \"SyncStatus\" ADD VALUE 'PARTIAL';" 2>/dev/null; then
+        log_info "✓ Значення PARTIAL додано до enum SyncStatus"
+    elif sudo docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U qms -d qms -c "ALTER TYPE \"SyncStatus\" ADD VALUE 'PARTIAL';" 2>/dev/null; then
+        log_info "✓ Значення PARTIAL додано до enum SyncStatus (qms:qms)"
+    else
+        log_warn "Не вдалося додати PARTIAL (можливо, вже існує)"
+    fi
 else
-    log_warn "Можливо, PARTIAL вже існує або помилка підключення"
+    log_info "✓ Значення PARTIAL вже існує в enum SyncStatus"
 fi
 
 # ============================================
