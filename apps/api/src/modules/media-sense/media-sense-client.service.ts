@@ -459,12 +459,14 @@ export class MediaSenseClientService {
 
           return this.session;
         } else {
-          // No JSESSIONID - use Basic Auth for all requests
-          // Some MediaSense versions may accept Basic Auth for query endpoints
-          this.msLogger.info(`[${requestId}] Basic Auth works, using it for all requests (no JSESSIONID)`, {
+          // No JSESSIONIDSSO - use Basic Auth for all requests
+          // Note: For MediaSense 11.5, query endpoints may require JSESSIONIDSSO cookie
+          // If query endpoints return 4021, this indicates JSESSIONIDSSO is required
+          this.msLogger.info(`[${requestId}] Basic Auth works, using it for all requests (no JSESSIONIDSSO)`, {
             requestId,
             duration: Date.now() - startTime,
-            note: 'Will use Basic Auth header for all API requests',
+            note: 'Will use Basic Auth header for all API requests. Query endpoints may require JSESSIONIDSSO cookie.',
+            warning: 'If query endpoints return 4021, JSESSIONIDSSO cookie is required but not available from MediaSense server',
           });
 
           // Create session with Basic Auth - we'll use Authorization header for all requests
@@ -530,6 +532,16 @@ export class MediaSenseClientService {
     if (path.includes('queryService')) {
       defaultHeaders['Accept'] = 'application/json';
     }
+    
+    // Log authentication method for query endpoints (for debugging)
+    if (path.includes('queryService')) {
+      const authMethod = defaultHeaders['Cookie'] ? 'Cookie' : (defaultHeaders['Authorization'] ? 'Basic Auth' : 'None');
+      this.msLogger.debug(`[${requestId}] Query request authentication method: ${authMethod}`, {
+        requestId,
+        hasCookie: !!defaultHeaders['Cookie'],
+        hasBasicAuth: !!defaultHeaders['Authorization'],
+      });
+    }
 
     const config: AxiosRequestConfig = {
       method,
@@ -557,12 +569,28 @@ export class MediaSenseClientService {
         // Check for session error (4021)
         if (responseCode === 4021) {
           const errorMessage = responseMessage || 'Invalid session';
-          this.msLogger.warn(`[${requestId}] Invalid session detected (responseCode: 4021), attempting re-login`, {
+          const isBasicAuthSession = this.session?.sessionId?.startsWith('basic-');
+          
+          this.msLogger.warn(`[${requestId}] Invalid session detected (responseCode: 4021)`, {
             requestId,
             httpStatus: response.status,
             message: errorMessage,
+            isBasicAuthSession,
+            hasCookies: this.session?.cookies?.length > 0,
+            path: path,
           });
 
+          // For MediaSense 11.5: if using Basic Auth and getting 4021 on query endpoints,
+          // this might mean the endpoint doesn't support Basic Auth
+          // Try to re-login to get JSESSIONIDSSO, but if that fails, return error
+          if (isBasicAuthSession && path.includes('queryService')) {
+            this.msLogger.warn(`[${requestId}] Query endpoint returned 4021 with Basic Auth - JSESSIONIDSSO required`, {
+              requestId,
+              note: 'MediaSense 11.5 query endpoints require JSESSIONIDSSO cookie, Basic Auth may not work',
+            });
+          }
+
+          // Try to re-login (might get JSESSIONIDSSO this time)
           this.session = null; // Clear invalid session
           await this.login(); // Re-login
           
@@ -581,6 +609,10 @@ export class MediaSenseClientService {
             
             // If retry successful, extract data from responseBody
             if (retryCode === 2000 || !retryCode) {
+              this.msLogger.info(`[${requestId}] Retry after re-login successful`, {
+                requestId,
+                retryCode,
+              });
               return {
                 success: true,
                 data: retryData?.responseBody || retryData,
@@ -588,6 +620,12 @@ export class MediaSenseClientService {
                 requestId,
                 duration: Date.now() - startTime,
               };
+            } else {
+              this.msLogger.warn(`[${requestId}] Retry after re-login still failed`, {
+                requestId,
+                retryCode,
+                retryMessage: retryData?.responseMessage,
+              });
             }
           } catch (retryError) {
             this.msLogger.error(`[${requestId}] Retry after re-login failed`, {
