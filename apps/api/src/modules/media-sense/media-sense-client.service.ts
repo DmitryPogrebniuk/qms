@@ -1015,7 +1015,13 @@ export class MediaSenseClientService {
 
   private extractJSessionId(cookies: string[]): string | null {
     for (const cookie of cookies) {
-      const match = cookie.match(/JSESSIONID=([^;]+)/);
+      // MediaSense may use JSESSIONIDSSO (Single Sign-On cookie)
+      const ssoMatch = cookie.match(/JSESSIONIDSSO=([^;]+)/i);
+      if (ssoMatch) {
+        return ssoMatch[1];
+      }
+      // Fallback to standard JSESSIONID
+      const match = cookie.match(/JSESSIONID=([^;]+)/i);
       if (match) {
         return match[1];
       }
@@ -1028,14 +1034,23 @@ export class MediaSenseClientService {
 
     const headers: Record<string, string> = {};
 
-    // Always try to use JSESSIONID cookie first
-    const jsessionCookie = this.session.cookies.find(c => c.includes('JSESSIONID'));
+    // Always try to use JSESSIONIDSSO or JSESSIONID cookie first
+    const jsessionCookie = this.session.cookies.find(c => 
+      c.includes('JSESSIONIDSSO') || c.includes('JSESSIONID')
+    );
     if (jsessionCookie) {
-      // Extract JSESSIONID value
+      // Extract JSESSIONIDSSO or JSESSIONID value
       const jsessionId = this.extractJSessionId([jsessionCookie]);
       if (jsessionId) {
-        headers['Cookie'] = `JSESSIONID=${jsessionId}`;
-        return headers; // JSESSIONID found, use it
+        // Use JSESSIONIDSSO if available, otherwise JSESSIONID
+        const cookieName = jsessionCookie.includes('JSESSIONIDSSO') ? 'JSESSIONIDSSO' : 'JSESSIONID';
+        headers['Cookie'] = `${cookieName}=${jsessionId}`;
+        // Also include Basic Auth as fallback (some endpoints may need both)
+        const auth = Buffer.from(
+          `${this.config.apiKey}:${this.config.apiSecret}`,
+        ).toString('base64');
+        headers['Authorization'] = `Basic ${auth}`;
+        return headers;
       }
     } else if (this.session.cookies.length > 0) {
       // Fallback to all cookies
