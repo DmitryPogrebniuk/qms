@@ -21,9 +21,14 @@ export class MediaSenseIngestionService {
 
   /**
    * Incremental metadata ingestion (every 30 minutes)
+   * DISABLED: Using MediaSenseSyncService instead which uses correct API endpoints
    */
-  @Cron('*/30 * * * *')
+  // @Cron('*/30 * * * *')
   async ingestMetadata(): Promise<void> {
+    // DISABLED: This service uses incorrect /api/recordings endpoint
+    // Use MediaSenseSyncService instead which uses proper /ora/queryService/query/sessions
+    this.logger.warn('MediaSenseIngestionService is disabled. Use MediaSenseSyncService instead.');
+    return;
     this.logger.log('Starting MediaSense metadata ingestion...');
     try {
       const syncState = await this.prisma.syncState.findUnique({
