@@ -37,12 +37,12 @@ fi
 
 # 1. Перевірка даних в БД
 log_info "1. Перевірка записів в БД..."
-RECORD_COUNT=$(sudo docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U qms_user -d qms -t -c "SELECT COUNT(*) FROM \"Recording\";" | tr -d ' ')
+RECORD_COUNT=$(cd /opt/qms && sudo docker compose -f "$COMPOSE_FILE" exec postgres psql -U qms_user -d qms -t -c "SELECT COUNT(*) FROM \"Recording\";" | tr -d ' ')
 if [ "$RECORD_COUNT" -gt 0 ]; then
     log_info "✓ Знайдено $RECORD_COUNT записів в БД"
     
     # Показати діапазон дат
-    DATE_RANGE=$(sudo docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U qms_user -d qms -t -c "
+    DATE_RANGE=$(cd /opt/qms && sudo docker compose -f "$COMPOSE_FILE" exec postgres psql -U qms_user -d qms -t -c "
         SELECT 
             MIN(\"startTime\")::text || ' до ' || MAX(\"startTime\")::text
         FROM \"Recording\";
@@ -55,7 +55,7 @@ fi
 # 2. Перевірка статусу синхронізації
 log_info ""
 log_info "2. Перевірка статусу синхронізації..."
-SYNC_STATUS=$(sudo docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U qms_user -d qms -t -c "
+SYNC_STATUS=$(cd /opt/qms && sudo docker compose -f "$COMPOSE_FILE" exec postgres psql -U qms_user -d qms -t -c "
     SELECT 
         status::text || ' | Fetched: ' || \"totalFetched\"::text || ' | Created: ' || \"totalCreated\"::text
     FROM \"SyncState\" 

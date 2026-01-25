@@ -42,6 +42,9 @@ else
 fi
 
 log_info "Використовується: $COMPOSE_FILE"
+
+# Переконатися, що ми в правильній директорії
+cd /opt/qms || { log_error "Не вдалося перейти в /opt/qms"; exit 1; }
 echo ""
 
 # ============================================
@@ -50,7 +53,7 @@ echo ""
 log_step "Крок 1: Виправлення enum SyncStatus (додавання PARTIAL)..."
 
 # Перевірити, чи PARTIAL вже існує
-PARTIAL_EXISTS=$(sudo docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U qms_user -d qms -t -c "
+PARTIAL_EXISTS=$(cd /opt/qms && sudo docker compose -f "$COMPOSE_FILE" exec postgres psql -U qms_user -d qms -t -c "
     SELECT COUNT(*) 
     FROM pg_enum 
     WHERE enumlabel = 'PARTIAL' 
@@ -59,9 +62,9 @@ PARTIAL_EXISTS=$(sudo docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U
 
 if [ "$PARTIAL_EXISTS" = "0" ] || [ -z "$PARTIAL_EXISTS" ]; then
     # Спробувати додати з qms_user
-    if sudo docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U qms_user -d qms -c "ALTER TYPE \"SyncStatus\" ADD VALUE 'PARTIAL';" 2>/dev/null; then
+    if cd /opt/qms && sudo docker compose -f "$COMPOSE_FILE" exec postgres psql -U qms_user -d qms -c "ALTER TYPE \"SyncStatus\" ADD VALUE 'PARTIAL';" 2>/dev/null; then
         log_info "✓ Значення PARTIAL додано до enum SyncStatus"
-    elif sudo docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U qms -d qms -c "ALTER TYPE \"SyncStatus\" ADD VALUE 'PARTIAL';" 2>/dev/null; then
+    elif cd /opt/qms && sudo docker compose -f "$COMPOSE_FILE" exec postgres psql -U qms -d qms -c "ALTER TYPE \"SyncStatus\" ADD VALUE 'PARTIAL';" 2>/dev/null; then
         log_info "✓ Значення PARTIAL додано до enum SyncStatus (qms:qms)"
     else
         log_warn "Не вдалося додати PARTIAL (можливо, вже існує)"
@@ -75,11 +78,11 @@ fi
 # ============================================
 log_step "Крок 2: Визначення credentials БД..."
 
-if sudo docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U qms_user -d qms -c "SELECT version();" > /dev/null 2>&1; then
+if cd /opt/qms && sudo docker compose -f "$COMPOSE_FILE" exec postgres psql -U qms_user -d qms -c "SELECT version();" > /dev/null 2>&1; then
     DB_USER="qms_user"
     DB_PASS="qms_password_secure"
     log_info "✓ Використовується qms_user:qms_password_secure"
-elif sudo docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U qms -d qms -c "SELECT version();" > /dev/null 2>&1; then
+elif cd /opt/qms && sudo docker compose -f "$COMPOSE_FILE" exec postgres psql -U qms -d qms -c "SELECT version();" > /dev/null 2>&1; then
     DB_USER="qms"
     DB_PASS="qms"
     log_info "✓ Використовується qms:qms"
@@ -134,7 +137,7 @@ log_step "Крок 5: Скидання checkpoint синхронізації Med
 
 cd ../..
 
-sudo docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U "$DB_USER" -d qms << EOF
+cd /opt/qms && sudo docker compose -f "$COMPOSE_FILE" exec postgres psql -U "$DB_USER" -d qms << EOF
 -- Скинути checkpoint для початку з поточних дат
 UPDATE "SyncState" 
 SET 
@@ -168,7 +171,7 @@ log_step "Крок 7: Перевірка статусу..."
 sleep 5
 
 # Перевірка enum
-if sudo docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U "$DB_USER" -d qms -c "SELECT unnest(enum_range(NULL::\"SyncStatus\")) AS values;" | grep -q "PARTIAL"; then
+if cd /opt/qms && sudo docker compose -f "$COMPOSE_FILE" exec postgres psql -U "$DB_USER" -d qms -c "SELECT unnest(enum_range(NULL::\"SyncStatus\")) AS values;" | grep -q "PARTIAL"; then
     log_info "✓ Enum SyncStatus містить PARTIAL"
 else
     log_warn "PARTIAL не знайдено в enum"
@@ -182,7 +185,7 @@ else
 fi
 
 # Перевірка записів в БД
-RECORD_COUNT=$(sudo docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U "$DB_USER" -d qms -t -c "SELECT COUNT(*) FROM \"Recording\";" | tr -d ' ')
+RECORD_COUNT=$(cd /opt/qms && sudo docker compose -f "$COMPOSE_FILE" exec postgres psql -U "$DB_USER" -d qms -t -c "SELECT COUNT(*) FROM \"Recording\";" | tr -d ' ')
 log_info "  Записів в БД: $RECORD_COUNT"
 
 # ============================================
