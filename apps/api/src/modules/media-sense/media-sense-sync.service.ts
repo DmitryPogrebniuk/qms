@@ -627,7 +627,8 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
           dnis: raw.dnis || raw.calledNumber || raw.toNumber,
           callerName: raw.callerName || raw.fromName,
           calledName: raw.calledName || raw.toName,
-          agentId: raw.agentId || raw.agent?.id || raw.ownerId,
+          agentId: raw.agentId || raw.agent?.id || raw.ownerId || 
+                   raw.tracks?.[0]?.participants?.[0]?.deviceId,
           agentName: raw.agentName || raw.agent?.name || raw.ownerName,
           teamId: raw.teamId || raw.team?.id,
           teamName: raw.teamName || raw.team?.name,
@@ -638,7 +639,7 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
           wrapUpCode: raw.wrapUpCode || raw.wrapUp?.code,
           dispositionCode: raw.dispositionCode || raw.disposition,
           extension: raw.extension || raw.agentExtension,
-          contactId: raw.contactId || raw.contact?.id,
+          contactId: raw.contactId || raw.contact?.id || raw.tracks?.[0]?.participants?.[0]?.xRefCi,
           callId: raw.callId || raw.call?.id,
           transferCount: raw.transferCount || raw.transfers || 0,
           holdTime: raw.holdTime || raw.holdDuration || 0,
