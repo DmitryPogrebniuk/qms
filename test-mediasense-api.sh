@@ -58,22 +58,68 @@ log_info "  URL: $API_URL"
 log_info "  User: $API_KEY"
 log_info ""
 
-# Тест 1: Автентифікація
-log_info "1. Тест автентифікації..."
+# Тест 1: Автентифікація через login endpoint (для отримання JSESSIONID)
+log_info "1. Тест автентифікації через login endpoint..."
+
+# Спробувати POST login з Basic Auth
+LOGIN_RESPONSE=$(curl -k -s -w "\n%{http_code}" -u "$API_KEY:$API_SECRET" \
+    -X POST "$API_URL/ora/authenticationService/authentication/login" \
+    -H "Content-Type: application/json" \
+    -d '{}' \
+    -c /tmp/mediasense_cookies.txt)
+
+LOGIN_HTTP_CODE=$(echo "$LOGIN_RESPONSE" | tail -1)
+LOGIN_BODY=$(echo "$LOGIN_RESPONSE" | sed '$d')
+
+# Перевірити чи є JSESSIONID в cookies
+JSESSIONID=$(grep -i "JSESSIONID" /tmp/mediasense_cookies.txt 2>/dev/null | awk '{print $7}' || echo "")
+
+if [ -n "$JSESSIONID" ]; then
+    log_info "✓ JSESSIONID отримано: ${JSESSIONID:0:20}..."
+    COOKIE_HEADER="Cookie: JSESSIONID=$JSESSIONID"
+else
+    log_warn "⚠ JSESSIONID не знайдено в cookies"
+    COOKIE_HEADER=""
+fi
+
+# Перевірити body на помилки
+if echo "$LOGIN_BODY" | grep -q "responseCode.*4021\|Invalid session"; then
+    log_error "✗ Помилка в відповіді: Invalid session"
+    echo "$LOGIN_BODY" | head -5 | sed 's/^/    /'
+elif [ "$LOGIN_HTTP_CODE" = "200" ] || [ "$LOGIN_HTTP_CODE" = "201" ]; then
+    log_info "✓ Login endpoint повернув HTTP $LOGIN_HTTP_CODE"
+    if [ -z "$JSESSIONID" ]; then
+        log_warn "  Але JSESSIONID не знайдено - можливо потрібен інший формат запиту"
+    fi
+else
+    log_warn "⚠ Login endpoint повернув HTTP $LOGIN_HTTP_CODE"
+fi
+
+echo ""
+
+# Тест 1.1: Альтернативний спосіб - Basic Auth на serviceInfo
+log_info "1.1. Тест Basic Auth на serviceInfo..."
 AUTH_RESPONSE=$(curl -k -s -w "\n%{http_code}" -u "$API_KEY:$API_SECRET" \
     "$API_URL/ora/serviceInfo" \
-    -H "Content-Type: application/json")
+    -H "Content-Type: application/json" \
+    -c /tmp/mediasense_cookies2.txt)
 
 HTTP_CODE=$(echo "$AUTH_RESPONSE" | tail -1)
 BODY=$(echo "$AUTH_RESPONSE" | sed '$d')
 
+JSESSIONID2=$(grep -i "JSESSIONID" /tmp/mediasense_cookies2.txt 2>/dev/null | awk '{print $7}' || echo "")
+
 if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
-    log_info "✓ Автентифікація успішна (HTTP $HTTP_CODE)"
-    echo "$BODY" | head -10 | sed 's/^/    /'
+    if [ -n "$JSESSIONID2" ]; then
+        log_info "✓ serviceInfo повернув HTTP $HTTP_CODE та JSESSIONID"
+        JSESSIONID="$JSESSIONID2"
+        COOKIE_HEADER="Cookie: JSESSIONID=$JSESSIONID"
+    else
+        log_info "✓ serviceInfo працює (HTTP $HTTP_CODE), але JSESSIONID не отримано"
+        log_warn "  Це може означати, що query endpoints потребують JSESSIONID"
+    fi
 else
-    log_error "✗ Автентифікація не вдалася (HTTP $HTTP_CODE)"
-    echo "$BODY" | head -20 | sed 's/^/    /'
-    exit 1
+    log_error "✗ serviceInfo не вдався (HTTP $HTTP_CODE)"
 fi
 
 echo ""
@@ -110,10 +156,19 @@ QUERY_BODY=$(cat <<EOF
 EOF
 )
 
-QUERY_RESPONSE=$(curl -k -s -w "\n%{http_code}" -u "$API_KEY:$API_SECRET" \
-    -X POST "$API_URL/ora/queryService/query/sessions" \
-    -H "Content-Type: application/json" \
-    -d "$QUERY_BODY")
+# Використовувати JSESSIONID якщо є, інакше Basic Auth
+if [ -n "$JSESSIONID" ]; then
+    QUERY_RESPONSE=$(curl -k -s -w "\n%{http_code}" \
+        -X POST "$API_URL/ora/queryService/query/sessions" \
+        -H "Content-Type: application/json" \
+        -H "$COOKIE_HEADER" \
+        -d "$QUERY_BODY")
+else
+    QUERY_RESPONSE=$(curl -k -s -w "\n%{http_code}" -u "$API_KEY:$API_SECRET" \
+        -X POST "$API_URL/ora/queryService/query/sessions" \
+        -H "Content-Type: application/json" \
+        -d "$QUERY_BODY")
+fi
 
 QUERY_HTTP_CODE=$(echo "$QUERY_RESPONSE" | tail -1)
 QUERY_BODY_RESPONSE=$(echo "$QUERY_RESPONSE" | sed '$d')
@@ -123,7 +178,18 @@ log_info "  Діапазон: $START_DATE до $END_DATE"
 log_info "  HTTP Status: $QUERY_HTTP_CODE"
 echo ""
 
-if [ "$QUERY_HTTP_CODE" = "200" ] || [ "$QUERY_HTTP_CODE" = "201" ]; then
+# Перевірити на помилку в body (навіть якщо HTTP 200)
+if echo "$QUERY_BODY_RESPONSE" | grep -q "responseCode.*4021\|Invalid session"; then
+    log_error "✗ Помилка: Invalid session (навіть при HTTP $QUERY_HTTP_CODE)"
+    echo "  Відповідь:"
+    echo "$QUERY_BODY_RESPONSE" | head -5 | sed 's/^/    /'
+    if [ -z "$JSESSIONID" ]; then
+        log_warn "  ⚠ Можлива причина: відсутній JSESSIONID cookie"
+        log_info "  Рекомендація: перевірте, чи login endpoint повертає JSESSIONID"
+    else
+        log_warn "  ⚠ JSESSIONID є, але сесія невалідна - можливо застаріла"
+    fi
+elif [ "$QUERY_HTTP_CODE" = "200" ] || [ "$QUERY_HTTP_CODE" = "201" ]; then
     log_info "✓ Запит успішний"
     echo "  Відповідь:"
     echo "$QUERY_BODY_RESPONSE" | jq '.' 2>/dev/null || echo "$QUERY_BODY_RESPONSE" | head -30 | sed 's/^/    /'
