@@ -32,6 +32,18 @@ export interface MediaSenseSession {
   expiresAt: Date;
 }
 
+/**
+ * MediaSense API response format
+ * MediaSense returns responses in format: { responseCode, responseMessage, responseBody }
+ */
+export interface MediaSenseApiResponse<T = any> {
+  responseCode?: number;
+  responseMessage?: string;
+  responseBody?: T;
+  // Some endpoints may return data directly
+  [key: string]: any;
+}
+
 export interface MediaSenseResponse<T = any> {
   success: boolean;
   data?: T;
@@ -306,7 +318,7 @@ export class MediaSenseClientService {
       );
 
       // Check response body for errors even if status is 200
-      const responseBody = response.data;
+      const responseBody = response.data as MediaSenseApiResponse;
       const hasError = responseBody?.responseCode && responseBody.responseCode !== 0;
       
       if ((response.status === 200 || response.status === 201) && !hasError) {
@@ -558,7 +570,7 @@ export class MediaSenseClientService {
         const response = await this.axiosInstance.request<T>(config);
 
         // Check for error in response body even if HTTP status is 200
-        const responseData = response.data;
+        const responseData = response.data as MediaSenseApiResponse<T>;
         
         // MediaSense API format: { responseCode, responseMessage, responseBody }
         // responseCode: 2000 = success, 4021 = invalid session, other = error
@@ -604,7 +616,7 @@ export class MediaSenseClientService {
               },
             });
             
-            const retryData = retryResponse.data;
+            const retryData = retryResponse.data as MediaSenseApiResponse<T>;
             const retryCode = retryData?.responseCode;
             
             // If retry successful, extract data from responseBody
