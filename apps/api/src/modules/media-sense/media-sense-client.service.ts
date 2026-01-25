@@ -625,9 +625,13 @@ export class MediaSenseClientService {
                 requestId,
                 retryCode,
               });
+              // Extract data: prefer responseBody if available, otherwise use the whole response
+              const extractedData = retryData?.responseBody !== undefined 
+                ? (retryData.responseBody as T)
+                : (retryData as unknown as T);
               return {
                 success: true,
-                data: retryData?.responseBody || retryData,
+                data: extractedData,
                 statusCode: retryResponse.status,
                 requestId,
                 duration: Date.now() - startTime,
@@ -674,7 +678,11 @@ export class MediaSenseClientService {
         }
 
         // Success: extract data from responseBody if present, otherwise use responseData directly
-        const data = responseBody !== undefined ? responseBody : responseData;
+        // TypeScript: responseBody is T | undefined, responseData is MediaSenseApiResponse<T>
+        // We need to extract T from either source
+        const data: T = responseBody !== undefined 
+          ? responseBody 
+          : (responseData as unknown as T);
         
         return {
           success: true,
