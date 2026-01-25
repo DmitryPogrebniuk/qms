@@ -225,7 +225,11 @@ export class MediaSenseClientService {
         },
       );
 
-      if (response.status === 200 || response.status === 201) {
+      // Check response body for errors even if status is 200
+      const responseBody = response.data;
+      const hasError = responseBody?.responseCode && responseBody.responseCode !== 0;
+      
+      if ((response.status === 200 || response.status === 201) && !hasError) {
         const cookies = response.headers['set-cookie'] || [];
         const jsessionId = this.extractJSessionId(cookies);
 
@@ -243,7 +247,20 @@ export class MediaSenseClientService {
           });
 
           return this.session;
+        } else {
+          this.msLogger.warn(`[${requestId}] Login returned 200 but no JSESSIONID cookie`, {
+            requestId,
+            cookies: cookies.length,
+            responseBody: this.truncateData(responseBody, 200),
+          });
         }
+      } else if (hasError) {
+        this.msLogger.warn(`[${requestId}] Login returned error in response body`, {
+          requestId,
+          status: response.status,
+          responseCode: responseBody?.responseCode,
+          message: responseBody?.responseMessage,
+        });
       }
 
       // If primary fails, try alternative endpoint
@@ -269,11 +286,51 @@ export class MediaSenseClientService {
     const requestId = `${parentRequestId}-alt`;
     const startTime = Date.now();
 
-    // Try Basic Auth
+    // Try Basic Auth on login endpoint to get JSESSIONID
     const auth = Buffer.from(
       `${this.config.apiKey}:${this.config.apiSecret}`,
     ).toString('base64');
 
+    // Strategy 1: Try Basic Auth on login endpoint
+    try {
+      const loginResponse = await this.axiosInstance.post(
+        this.endpoints.login,
+        {},
+        {
+          headers: {
+            Authorization: `Basic ${auth}`,
+          },
+          validateStatus: () => true,
+        },
+      );
+
+      if (loginResponse.status === 200 || loginResponse.status === 201) {
+        const cookies = loginResponse.headers['set-cookie'] || [];
+        const jsessionId = this.extractJSessionId(cookies);
+
+        if (jsessionId) {
+          this.session = {
+            sessionId: jsessionId,
+            cookies,
+            expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+          };
+
+          this.msLogger.info(`[${requestId}] Alternative login successful (Basic Auth on login endpoint)`, {
+            requestId,
+            duration: Date.now() - startTime,
+            sessionIdMasked: this.maskSessionId(jsessionId),
+          });
+
+          return this.session;
+        }
+      }
+    } catch (error) {
+      this.msLogger.debug(`[${requestId}] Basic Auth on login endpoint failed, trying serviceInfo`, {
+        error: (error as Error).message,
+      });
+    }
+
+    // Strategy 2: Try Basic Auth on serviceInfo (may not return JSESSIONID)
     try {
       const response = await this.axiosInstance.get(this.endpoints.serviceInfo, {
         headers: {
@@ -286,20 +343,37 @@ export class MediaSenseClientService {
         const cookies = response.headers['set-cookie'] || [];
         const jsessionId = this.extractJSessionId(cookies);
 
-        // Even if no JSESSIONID, Basic Auth might work for all requests
-        this.session = {
-          sessionId: jsessionId || `basic-${Date.now()}`,
-          cookies: jsessionId ? cookies : [`Authorization=Basic ${auth}`],
-          expiresAt: new Date(Date.now() + 30 * 60 * 1000),
-        };
+        // If we got JSESSIONID, use it; otherwise Basic Auth might work for some endpoints
+        if (jsessionId) {
+          this.session = {
+            sessionId: jsessionId,
+            cookies,
+            expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+          };
 
-        this.msLogger.info(`[${requestId}] Alternative login successful (Basic Auth)`, {
-          requestId,
-          duration: Date.now() - startTime,
-          method: jsessionId ? 'session' : 'basic',
-        });
+          this.msLogger.info(`[${requestId}] Alternative login successful (JSESSIONID from serviceInfo)`, {
+            requestId,
+            duration: Date.now() - startTime,
+            sessionIdMasked: this.maskSessionId(jsessionId),
+          });
 
-        return this.session;
+          return this.session;
+        } else {
+          // No JSESSIONID - this might not work for query endpoints
+          this.msLogger.warn(`[${requestId}] Basic Auth works but no JSESSIONID - query endpoints may fail`, {
+            requestId,
+            duration: Date.now() - startTime,
+          });
+
+          // Still create session with Basic Auth, but it might not work for all endpoints
+          this.session = {
+            sessionId: `basic-${Date.now()}`,
+            cookies: [`Authorization=Basic ${auth}`],
+            expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+          };
+
+          return this.session;
+        }
       }
 
       throw new Error(`Authentication failed: HTTP ${response.status}`);
@@ -354,9 +428,61 @@ export class MediaSenseClientService {
       try {
         const response = await this.axiosInstance.request<T>(config);
 
+        // Check for error in response body even if HTTP status is 200
+        const responseData = response.data;
+        const hasError = responseData?.responseCode && 
+          (responseData.responseCode === 4021 || // Invalid session
+           responseData.responseCode !== 0);
+        
+        if (hasError) {
+          const errorMessage = responseData?.responseMessage || 'API returned error';
+          this.msLogger.warn(`[${requestId}] API returned error in response body`, {
+            requestId,
+            httpStatus: response.status,
+            responseCode: responseData?.responseCode,
+            message: errorMessage,
+          });
+
+          // If it's a session error, try to re-login
+          if (responseData?.responseCode === 4021) {
+            this.msLogger.info(`[${requestId}] Invalid session detected, attempting re-login`);
+            this.session = null; // Clear invalid session
+            await this.login(); // Re-login
+            
+            // Retry the request once after re-login
+            try {
+              const retryResponse = await this.axiosInstance.request<T>({
+                ...config,
+                headers: {
+                  ...config.headers,
+                  ...this.getSessionHeaders(),
+                },
+              });
+              
+              return {
+                success: true,
+                data: retryResponse.data,
+                statusCode: retryResponse.status,
+                requestId,
+                duration: Date.now() - startTime,
+              };
+            } catch (retryError) {
+              // Fall through to return error
+            }
+          }
+
+          return {
+            success: false,
+            error: errorMessage,
+            statusCode: response.status,
+            requestId,
+            duration: Date.now() - startTime,
+          };
+        }
+
         return {
           success: true,
-          data: response.data,
+          data: responseData,
           statusCode: response.status,
           requestId,
           duration: Date.now() - startTime,
@@ -845,16 +971,25 @@ export class MediaSenseClientService {
 
     const headers: Record<string, string> = {};
 
-    // Add cookies
-    if (this.session.cookies.length > 0) {
+    // Always try to use JSESSIONID cookie first
+    const jsessionCookie = this.session.cookies.find(c => c.includes('JSESSIONID'));
+    if (jsessionCookie) {
+      // Extract JSESSIONID value
+      const jsessionId = this.extractJSessionId([jsessionCookie]);
+      if (jsessionId) {
+        headers['Cookie'] = `JSESSIONID=${jsessionId}`;
+      }
+    } else if (this.session.cookies.length > 0) {
+      // Fallback to all cookies
       const cookieHeader = this.session.cookies
         .map((c) => c.split(';')[0])
         .join('; ');
       headers['Cookie'] = cookieHeader;
     }
 
-    // If using Basic Auth fallback
-    if (this.session.sessionId.startsWith('basic-') && this.config) {
+    // If no JSESSIONID and using Basic Auth fallback, add Authorization header
+    // But note: Basic Auth alone might not work for query endpoints
+    if (!jsessionCookie && this.session.sessionId.startsWith('basic-') && this.config) {
       const auth = Buffer.from(
         `${this.config.apiKey}:${this.config.apiSecret}`,
       ).toString('base64');
