@@ -86,7 +86,9 @@ export class MediaSenseClientService {
     serviceInfo: '/ora/serviceInfo',
     serviceInfoAlt: '/ora/queryService/query/serviceInfo',
     // Query service (MediaSense 11.5 uses this endpoint)
-    querySessions: '/ora/queryService/query/sessions',
+    // Real endpoint from reverse engineering: /ora/queryService/query/getSessions
+    querySessions: '/ora/queryService/query/getSessions',
+    querySessionsAlt: '/ora/queryService/query/sessions', // Fallback
     querySessionById: '/ora/queryService/query/sessionBySessionId',
     // Event service
     subscribeEvents: '/ora/eventService/event/subscribeToEvents',
@@ -318,8 +320,9 @@ export class MediaSenseClientService {
       );
 
       // Check response body for errors even if status is 200
+      // MediaSense 11.5 format: { responseCode, responseMessage, responseBody }
       const responseBody = response.data as MediaSenseApiResponse;
-      const hasError = responseBody?.responseCode && responseBody.responseCode !== 0;
+      const hasError = responseBody?.responseCode && responseBody.responseCode !== 2000 && responseBody.responseCode !== 0;
       
       if ((response.status === 200 || response.status === 201) && !hasError) {
         // Axios in Node.js returns Set-Cookie headers as array or string
@@ -864,29 +867,41 @@ export class MediaSenseClientService {
         }
       }
 
-      // Try 3: Query endpoint (only if we have JSESSIONIDSSO or want to test)
-      // Skip this for MediaSense 11.5 if we don't have JSESSIONIDSSO, as it will fail with 4021
+      // Try 3: Query endpoint (only if we have JSESSIONID or want to test)
+      // MediaSense 11.5 uses JSESSIONID (not JSESSIONIDSSO) from reverse engineering
       if (!apiResponse?.success && this.session?.cookies?.some(c => c.includes('JSESSIONID'))) {
         try {
-          // Use proper query format for MediaSense 11.5
+          // Use REAL MediaSense 11.5 format from reverse engineering
+          const testStartTime = Date.now() - 60000; // 1 minute ago
+          const testEndTime = Date.now();
+          
           apiResponse = await this.request('POST', this.endpoints.querySessions, {
-            queryType: 'sessions',
-            conditions: [
+            requestParameters: [
               {
-                field: 'sessionEndTime',
-                operator: 'gte',
-                value: new Date(Date.now() - 60000).toISOString(),
+                fieldName: 'sessionState',
+                fieldConditions: [
+                  {
+                    fieldOperator: 'equals',
+                    fieldValues: ['CLOSED_NORMAL'],
+                    fieldConnector: 'OR',
+                  },
+                  {
+                    fieldOperator: 'equals',
+                    fieldValues: ['CLOSED_ERROR'],
+                  },
+                ],
+                paramConnector: 'AND',
               },
               {
-                field: 'sessionEndTime',
-                operator: 'lte',
-                value: new Date().toISOString(),
+                fieldName: 'sessionStartDate',
+                fieldConditions: [
+                  {
+                    fieldOperator: 'between',
+                    fieldValues: [testStartTime, testEndTime],
+                  },
+                ],
               },
             ],
-            paging: {
-              offset: 0,
-              limit: 1,
-            },
           });
           
           if (apiResponse.success) {
@@ -919,13 +934,13 @@ export class MediaSenseClientService {
           message: errorMessage,
         });
 
-        // For MediaSense 11.5, if we don't have JSESSIONIDSSO, query endpoints will fail
+        // For MediaSense 11.5, query endpoints require JSESSIONID cookie
         if (errorMessage.includes('4021') || errorMessage.includes('Invalid session')) {
           recommendations.push(
-            'Query endpoints require JSESSIONIDSSO cookie. MediaSense 11.5 may not provide cookies via API authentication.',
+            'Query endpoints require JSESSIONID cookie. MediaSense 11.5 may not provide cookies via API authentication.',
           );
           recommendations.push(
-            'Consider using Basic Auth for serviceInfo endpoint, or check MediaSense server configuration for cookie-based authentication.',
+            'Try logging in through web interface and copying JSESSIONID cookie, or check MediaSense server configuration for cookie-based authentication.',
           );
         } else if (errorMessage.includes('404')) {
           recommendations.push(
@@ -978,11 +993,30 @@ export class MediaSenseClientService {
    * Query sessions from MediaSense
    * 
    * MediaSense 11.5.1.12001-8 uses:
-   * - Endpoint: /ora/queryService/query/sessions
-   * - Requires JSESSIONIDSSO cookie (not Basic Auth)
-   * - Uses sessionEndTime for filtering (more reliable than sessionStartTime)
+   * - Endpoint: /ora/queryService/query/getSessions (from reverse engineering)
+   * - Requires JSESSIONID cookie (not JSESSIONIDSSO)
+   * - Uses requestParameters format with fieldName/fieldConditions
+   * - Uses sessionStartDate with timestamps (milliseconds), not ISO strings
    * 
-   * Reference: Cisco MediaSense Developer Guide Release 11.0+
+   * Real API format from reverse engineering:
+   * {
+   *   "requestParameters": [
+   *     {
+   *       "fieldName": "sessionState",
+   *       "fieldConditions": [...],
+   *       "paramConnector": "AND"
+   *     },
+   *     {
+   *       "fieldName": "sessionStartDate",
+   *       "fieldConditions": [
+   *         {
+   *           "fieldOperator": "between",
+   *           "fieldValues": [startTimestamp, endTimestamp]
+   *         }
+   *       ]
+   *     }
+   *   ]
+   * }
    */
   async querySessions(params: {
     startTime: string;
@@ -1003,83 +1037,98 @@ export class MediaSenseClientService {
       offset: params.offset,
     });
 
-    // Build query body for MediaSense 11.5
-    // According to Cisco documentation, MediaSense 11.5 uses sessionEndTime for filtering
-    // Using only sessionEndTime is more reliable than sessionStartTime + sessionEndTime
+    // Convert ISO timestamps to milliseconds (MediaSense uses milliseconds)
+    const startTimestamp = new Date(params.startTime).getTime();
+    const endTimestamp = new Date(params.endTime).getTime();
+
+    // Build query body using REAL MediaSense 11.5 format from reverse engineering
     const queryBody: any = {
-      queryType: 'sessions',
-      conditions: [
+      requestParameters: [
         {
-          field: 'sessionEndTime',
-          operator: 'gte',
-          value: params.startTime,
+          fieldName: 'sessionState',
+          fieldConditions: [
+            {
+              fieldOperator: 'equals',
+              fieldValues: ['CLOSED_NORMAL'],
+              fieldConnector: 'OR',
+            },
+            {
+              fieldOperator: 'equals',
+              fieldValues: ['CLOSED_ERROR'],
+            },
+          ],
+          paramConnector: 'AND',
         },
         {
-          field: 'sessionEndTime',
-          operator: 'lte',
-          value: params.endTime,
+          fieldName: 'sessionStartDate',
+          fieldConditions: [
+            {
+              fieldOperator: 'between',
+              fieldValues: [startTimestamp, endTimestamp],
+            },
+          ],
         },
       ],
-      sorting: [
-        { field: 'sessionEndTime', order: 'asc' },
-      ],
-      paging: {
-        offset: params.offset || 0,
-        limit: params.limit || 100,
-      },
     };
-    
-    // Log query details for MediaSense 11.5 debugging
-    this.msLogger.debug(`[${requestId}] MediaSense 11.5 query request`, {
-      endpoint: this.endpoints.querySessions,
-      dateRange: `${params.startTime} to ${params.endTime}`,
-      hasSession: !!this.session,
-      sessionType: this.session?.cookies.some(c => c.includes('JSESSIONIDSSO')) ? 'JSESSIONIDSSO' : 'JSESSIONID',
-    });
 
     // Add optional filters
     if (params.agentId) {
-      queryBody.conditions.push({
-        field: 'agentId',
-        operator: 'eq',
-        value: params.agentId,
+      queryBody.requestParameters.push({
+        fieldName: 'agentId',
+        fieldConditions: [
+          {
+            fieldOperator: 'equals',
+            fieldValues: [params.agentId],
+          },
+        ],
       });
     }
 
     if (params.direction) {
-      queryBody.conditions.push({
-        field: 'direction',
-        operator: 'eq',
-        value: params.direction,
+      queryBody.requestParameters.push({
+        fieldName: 'direction',
+        fieldConditions: [
+          {
+            fieldOperator: 'equals',
+            fieldValues: [params.direction],
+          },
+        ],
       });
     }
 
-    if (params.ani) {
-      queryBody.conditions.push({
-        field: 'ani',
-        operator: 'contains',
-        value: params.ani,
-      });
-    }
-
-    if (params.dnis) {
-      queryBody.conditions.push({
-        field: 'dnis',
-        operator: 'contains',
-        value: params.dnis,
-      });
-    }
+    // Log query details
+    this.msLogger.debug(`[${requestId}] MediaSense 11.5 query request (real format)`, {
+      endpoint: this.endpoints.querySessions,
+      dateRange: `${params.startTime} to ${params.endTime}`,
+      timestamps: `${startTimestamp} to ${endTimestamp}`,
+      hasSession: !!this.session,
+      sessionType: this.session?.cookies.some(c => c.includes('JSESSIONID')) ? 'JSESSIONID' : 'none',
+    });
 
     try {
+      // Try real MediaSense 11.5 endpoint first
       const response = await this.request('POST', this.endpoints.querySessions, queryBody);
       
-      if (!response.success) {
-        // Try alternative query format for older MediaSense versions
+      if (response.success) {
+        return response;
+      }
+
+      // If failed, try alternative format (for compatibility)
+      this.msLogger.debug(`[${requestId}] Real format failed, trying alternative format`, {
+        error: response.error,
+      });
+      return this.querySessionsAlternative(params, requestId);
+    } catch (error) {
+      const axiosError = error as AxiosError;
+      
+      // If 404, endpoint might not exist, try alternative
+      if (axiosError.response?.status === 404) {
+        this.msLogger.warn(`[${requestId}] Endpoint ${this.endpoints.querySessions} not found (404), trying alternative`, {
+          error: (error as Error).message,
+        });
         return this.querySessionsAlternative(params, requestId);
       }
 
-      return response;
-    } catch (error) {
       this.msLogger.warn(`[${requestId}] Primary query failed, trying alternative`, {
         error: (error as Error).message,
       });

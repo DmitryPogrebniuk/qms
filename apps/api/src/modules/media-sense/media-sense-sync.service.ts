@@ -597,13 +597,31 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
     
     return sessions.map((raw: any) => {
       try {
-        // MediaSense field mapping (adjust based on actual API response)
+        // MediaSense 11.5 real format from reverse engineering:
+        // - sessionStartDate: timestamp in milliseconds
+        // - tracks: array of tracks with participants
+        // - urls: object with httpUrl, rtspUrl, mp4Url, wavUrl
+        // - sessionState: CLOSED_NORMAL, CLOSED_ERROR, etc.
+        
+        // Convert sessionStartDate (milliseconds) to ISO string
+        const startTime = raw.sessionStartDate 
+          ? new Date(raw.sessionStartDate).toISOString()
+          : (raw.startTime || raw.sessionStartTime);
+        
+        // Calculate endTime from startTime + duration
+        let endTime = raw.endTime || raw.sessionEndTime;
+        if (!endTime && raw.sessionStartDate && raw.tracks?.[0]?.trackDuration) {
+          const duration = raw.tracks[0].trackDuration; // milliseconds
+          endTime = new Date(raw.sessionStartDate + duration).toISOString();
+        }
+        
+        // MediaSense field mapping (based on real API response)
         return {
           sessionId: raw.sessionId || raw.id || raw.recordingId,
           recordingId: raw.recordingId || raw.mediaId,
-          startTime: raw.startTime || raw.sessionStartTime,
-          endTime: raw.endTime || raw.sessionEndTime,
-          duration: raw.duration || raw.durationSeconds,
+          startTime: startTime,
+          endTime: endTime,
+          duration: raw.duration || (raw.tracks?.[0]?.trackDuration ? raw.tracks[0].trackDuration / 1000 : undefined), // Convert ms to seconds
           direction: this.normalizeDirection(raw.direction || raw.callDirection),
           ani: raw.ani || raw.callerNumber || raw.fromNumber,
           dnis: raw.dnis || raw.calledNumber || raw.toNumber,
@@ -627,8 +645,8 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
           talkTime: raw.talkTime || raw.talkDuration,
           ringTime: raw.ringTime || raw.ringDuration,
           queueTime: raw.queueTime || raw.queueDuration,
-          participants: this.normalizeParticipants(raw.participants || raw.parties),
-          media: this.normalizeMedia(raw.media || raw.tracks || raw.recording),
+          participants: this.normalizeParticipants(raw.participants || raw.tracks?.[0]?.participants || raw.parties),
+          media: this.normalizeMedia(raw.media || raw.tracks || raw.recording, raw.urls),
           recorder: {
             node: raw.recorderNode || raw.recorder?.node,
             cluster: raw.recorderCluster || raw.recorder?.cluster,
@@ -660,30 +678,38 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
     if (!Array.isArray(participants)) return [];
     return participants.map(p => ({
       type: p.type || p.role || 'unknown',
-      id: p.id || p.participantId,
+      id: p.id || p.participantId || p.deviceId || p.deviceRef,
       name: p.name || p.displayName,
-      phoneNumber: p.phoneNumber || p.number || p.dn,
-      deviceName: p.deviceName || p.device,
-      joinTime: p.joinTime || p.startTime,
+      phoneNumber: p.phoneNumber || p.number || p.dn || p.deviceId,
+      deviceName: p.deviceName || p.device || p.deviceRef,
+      joinTime: p.joinTime || p.participantStartDate 
+        ? (p.participantStartDate ? new Date(p.participantStartDate).toISOString() : (p.joinTime || p.startTime))
+        : (p.joinTime || p.startTime),
       leaveTime: p.leaveTime || p.endTime,
     }));
   }
 
-  private normalizeMedia(media?: any): MediaSenseSessionData['media'] {
-    if (!media) return { hasAudio: false };
+  private normalizeMedia(media?: any, urls?: any): MediaSenseSessionData['media'] {
+    if (!media && !urls) return { hasAudio: false };
     
-    // Handle array of tracks
+    // Handle array of tracks (MediaSense 11.5 format)
     const track = Array.isArray(media) ? media[0] : media;
     
+    // MediaSense 11.5 provides urls object with httpUrl, mp4Url, wavUrl, rtspUrl
+    // Prefer wavUrl for audio, mp4Url for video, httpUrl as fallback
+    const mediaUrl = urls?.wavUrl || urls?.mp4Url || urls?.httpUrl || 
+                     track?.url || track?.mediaUrl || track?.audioUrl || track?.downloadUrl;
+    
     return {
-      hasAudio: Boolean(track?.url || track?.mediaUrl || track?.audioUrl),
+      hasAudio: Boolean(mediaUrl || track?.trackMediaType === 'AUDIO'),
       codec: track?.codec || track?.audioCodec,
       sampleRate: track?.sampleRate || track?.audioSampleRate,
       bitrate: track?.bitrate || track?.audioBitrate,
       channels: track?.channels || 1,
-      format: track?.format || track?.container || track?.fileType,
+      format: track?.format || track?.container || track?.fileType || 
+              (urls?.wavUrl ? 'wav' : urls?.mp4Url ? 'mp4' : undefined),
       size: track?.size || track?.fileSize,
-      url: track?.url || track?.mediaUrl || track?.audioUrl || track?.downloadUrl,
+      url: mediaUrl,
     };
   }
 
