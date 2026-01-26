@@ -10,8 +10,8 @@ echo "Перевірка конфігурації MediaSense в БД"
 echo "=========================================="
 echo ""
 
-# Try both possible database users
-for DB_USER in "qms" "qms_user"; do
+# Try both possible database users (qms_user is default in docker-compose.yml)
+for DB_USER in "qms_user" "qms"; do
   echo "[INFO] Спробуємо користувача БД: $DB_USER"
   
   # Check if user exists and can connect

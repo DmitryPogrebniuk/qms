@@ -13,13 +13,13 @@ echo ""
 # Get MediaSense config from DB
 echo "[INFO] Отримання конфігурації MediaSense з БД..."
 
-# Try both possible database users
-DB_USER="qms"
+# Try both possible database users (qms_user is default in docker-compose.yml)
+DB_USER="qms_user"
 SETTING_EXISTS=$(sudo docker compose -f infra/docker-compose.yml exec -T postgres psql -U "$DB_USER" -d qms -t -c "SELECT COUNT(*) FROM \"IntegrationSetting\" WHERE \"integrationType\" = 'mediasense'" 2>/dev/null | tr -d ' \n' || echo "0")
 
-# If failed, try qms_user
+# If failed, try qms
 if [ "$SETTING_EXISTS" = "0" ] || [ -z "$SETTING_EXISTS" ]; then
-  DB_USER="qms_user"
+  DB_USER="qms"
   SETTING_EXISTS=$(sudo docker compose -f infra/docker-compose.yml exec -T postgres psql -U "$DB_USER" -d qms -t -c "SELECT COUNT(*) FROM \"IntegrationSetting\" WHERE \"integrationType\" = 'mediasense'" 2>/dev/null | tr -d ' \n' || echo "0")
 fi
 
