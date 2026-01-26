@@ -1,4 +1,4 @@
-import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosError } from 'axios';
 import https from 'https';
@@ -106,9 +106,15 @@ export class MediaSenseClientService {
   constructor(
     private readonly configService: ConfigService,
     private readonly msLogger: MediaSenseLogger,
-    @Inject(forwardRef(() => MediaSenseCookieService))
-    private readonly cookieService?: MediaSenseCookieService,
-  ) {}
+    @Optional() private readonly cookieService?: MediaSenseCookieService,
+  ) {
+    // Log cookie service availability
+    if (this.cookieService) {
+      this.logger.debug('MediaSenseCookieService injected successfully');
+    } else {
+      this.logger.warn('MediaSenseCookieService not available - web interface automation will not work');
+    }
+  }
 
   /**
    * Initialize client with configuration
@@ -240,6 +246,8 @@ export class MediaSenseClientService {
     this.msLogger.info(`[${requestId}] Attempting MediaSense login`, {
       requestId,
       baseUrl: this.maskSensitiveUrl(this.config.baseUrl),
+      hasCookieService: !!this.cookieService,
+      hasManualJSessionId: !!this.config.manualJSessionId,
     });
 
     // TEMPORARY WORKAROUND: If manual JSESSIONID is provided, use it directly
