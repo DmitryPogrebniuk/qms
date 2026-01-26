@@ -31,6 +31,7 @@ export interface MediaSenseClientConfig {
   apiSecret: string; // Maps to password
   timeout?: number;
   allowSelfSigned?: boolean;
+  manualJSessionId?: string; // Optional: manually set JSESSIONID for testing (temporary workaround)
 }
 
 export interface MediaSenseSession {
@@ -237,6 +238,23 @@ export class MediaSenseClientService {
       requestId,
       baseUrl: this.maskSensitiveUrl(this.config.baseUrl),
     });
+
+    // TEMPORARY WORKAROUND: If manual JSESSIONID is provided, use it directly
+    // This is for testing purposes until we resolve the API authentication issue
+    if (this.config.manualJSessionId) {
+      this.msLogger.warn(`[${requestId}] Using manually provided JSESSIONID (temporary workaround)`, {
+        requestId,
+        sessionIdMasked: this.maskSessionId(this.config.manualJSessionId),
+      });
+
+      this.session = {
+        sessionId: this.config.manualJSessionId,
+        cookies: [`JSESSIONID=${this.config.manualJSessionId}`],
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000), // 30 min default
+      };
+
+      return this.session;
+    }
 
     // Try multiple authentication strategies
     const auth = Buffer.from(

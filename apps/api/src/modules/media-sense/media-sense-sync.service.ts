@@ -970,6 +970,7 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
     apiKey?: string;
     apiSecret?: string;
     allowSelfSigned?: boolean;
+    settings?: any;
   }> {
     try {
       // Get from IntegrationSetting in DB
@@ -986,6 +987,7 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
         apiKey,
         apiSecret,
         allowSelfSigned,
+        settings: setting.settings,
       };
     } catch {
       return { enabled: false };
@@ -997,11 +999,17 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
     if (!config?.enabled) {
       throw new Error('MediaSense not configured');
     }
+    
+    // Check for manual JSESSIONID from environment variable (temporary workaround)
+    const manualJSessionId = process.env.MEDIASENSE_JSESSIONID || 
+                              (config.settings as any)?.manualJSessionId;
+    
     this.mediaSenseClient.configure({
       baseUrl: config.apiUrl,
       apiKey: config.apiKey,
       apiSecret: config.apiSecret,
       allowSelfSigned: config.allowSelfSigned,
+      manualJSessionId: manualJSessionId, // Optional: for testing
     });
   }
 
