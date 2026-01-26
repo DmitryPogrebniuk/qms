@@ -321,12 +321,16 @@ export class MediaSenseClientService {
           location: formResponse.headers['location'],
         });
       }
-    } catch (error) {
-      // j_security_check might not be available, continue to next strategy
-      this.msLogger.debug(`[${requestId}] j_security_check not available, trying other methods`, {
-        error: (error as Error).message,
-      });
-    }
+      } catch (error) {
+        const axiosError = error as AxiosError;
+        // j_security_check might not be available, continue to next strategy
+        this.msLogger.warn(`[${requestId}] j_security_check failed`, {
+          error: (error as Error).message,
+          status: axiosError.response?.status,
+          statusText: axiosError.response?.statusText,
+          url: axiosError.config?.url,
+        });
+      }
 
     // Strategy 2: POST with Basic Auth header
     // For MediaSense 11.5, try with both Basic Auth and JSON body
@@ -404,13 +408,18 @@ export class MediaSenseClientService {
       // If all API authentication methods failed, try web interface automation
       if (this.cookieService) {
         try {
-          this.msLogger.info(`[${requestId}] API authentication failed, trying web interface automation`);
-          return this.loginViaWebInterface(requestId);
+          this.msLogger.info(`[${requestId}] All API authentication methods failed, trying web interface automation (Playwright)`);
+          return await this.loginViaWebInterface(requestId);
         } catch (webError) {
-          this.msLogger.warn(`[${requestId}] Web interface automation also failed`, {
-            error: (webError as Error).message,
+          const webErrorMsg = (webError as Error).message;
+          this.msLogger.error(`[${requestId}] Web interface automation failed`, {
+            error: webErrorMsg,
+            stack: (webError as Error).stack,
           });
+          // Continue to alternative login, but log that web interface also failed
         }
+      } else {
+        this.msLogger.warn(`[${requestId}] CookieService not available, skipping web interface automation`);
       }
 
       return this.loginAlternative(requestId);
@@ -422,11 +431,20 @@ export class MediaSenseClientService {
    * Fallback when API authentication doesn't work
    */
   private async loginViaWebInterface(requestId: string): Promise<MediaSenseSession> {
-    if (!this.config || !this.cookieService) {
-      throw new Error('Client or cookie service not configured');
+    if (!this.config) {
+      throw new Error('Client not configured');
+    }
+    
+    if (!this.cookieService) {
+      this.msLogger.error(`[${requestId}] CookieService not available for web interface automation`);
+      throw new Error('CookieService not available');
     }
 
     const startTime = Date.now();
+
+    this.msLogger.info(`[${requestId}] Starting web interface automation login`, {
+      baseUrl: this.maskSensitiveUrl(this.config.baseUrl),
+    });
 
     try {
       // Get JSESSIONID from web interface
@@ -454,11 +472,13 @@ export class MediaSenseClientService {
     } catch (error) {
       const duration = Date.now() - startTime;
       const errorMessage = (error as Error).message;
+      const errorStack = (error as Error).stack;
 
       this.msLogger.error(`[${requestId}] Web interface login failed`, {
         requestId,
         duration,
         error: errorMessage,
+        stack: errorStack,
       });
 
       throw new Error(`Web interface login failed: ${errorMessage}`);

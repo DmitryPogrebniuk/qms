@@ -70,39 +70,65 @@ export class MediaSenseCookieService implements OnModuleDestroy {
     const requestId = this.generateRequestId();
     const startTime = Date.now();
 
-    this.msLogger.info(`[${requestId}] Fetching JSESSIONID from web interface`, {
+    this.msLogger.info(`[${requestId}] Fetching JSESSIONID from web interface using Playwright`, {
       requestId,
       baseUrl: this.maskSensitiveUrl(baseUrl),
+      username: username,
     });
 
     let page: Page | null = null;
 
     try {
+      this.msLogger.debug(`[${requestId}] Checking browser instance...`);
+      
       // Launch browser if not already launched
       if (!this.browser) {
+        this.msLogger.info(`[${requestId}] Launching Chromium browser...`);
         // Use system Chromium in Docker, or download in development
         const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || 
                               (process.env.NODE_ENV === 'production' ? '/usr/bin/chromium' : undefined);
 
-        this.browser = await chromium.launch({
-          headless: true,
-          executablePath,
-          args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-gpu',
-            '--disable-web-security',
-            '--ignore-certificate-errors',
-            '--disable-software-rasterizer',
-          ],
-        });
+        try {
+          this.browser = await chromium.launch({
+            headless: true,
+            executablePath,
+            args: [
+              '--no-sandbox',
+              '--disable-setuid-sandbox',
+              '--disable-dev-shm-usage',
+              '--disable-gpu',
+              '--disable-web-security',
+              '--ignore-certificate-errors',
+              '--disable-software-rasterizer',
+            ],
+          });
+          this.msLogger.info(`[${requestId}] Browser launched successfully`, {
+            executablePath: executablePath || 'default',
+          });
+        } catch (browserError) {
+          this.msLogger.error(`[${requestId}] Failed to launch browser`, {
+            error: (browserError as Error).message,
+            executablePath,
+            stack: (browserError as Error).stack,
+          });
+          throw new Error(`Failed to launch browser: ${(browserError as Error).message}`);
+        }
 
         // Create context with ignore HTTPS errors for self-signed certificates
-        this.context = await this.browser.newContext({
-          ignoreHTTPSErrors: true,
-          viewport: { width: 1280, height: 720 },
-        });
+        try {
+          this.context = await this.browser.newContext({
+            ignoreHTTPSErrors: true,
+            viewport: { width: 1280, height: 720 },
+          });
+          this.msLogger.debug(`[${requestId}] Browser context created`);
+        } catch (contextError) {
+          this.msLogger.error(`[${requestId}] Failed to create browser context`, {
+            error: (contextError as Error).message,
+          });
+          throw contextError;
+        }
+      } else {
+        this.msLogger.debug(`[${requestId}] Using existing browser instance`);
       }
 
       // Create new page
