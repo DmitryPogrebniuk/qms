@@ -25,7 +25,20 @@ FROM node:18-alpine
 WORKDIR /app
 
 # Install signal handler and dependencies
-RUN apk add --no-cache dumb-init openssl openssl-dev
+# Also install Playwright dependencies for browser automation
+RUN apk add --no-cache \
+    dumb-init \
+    openssl \
+    openssl-dev \
+    chromium \
+    nss \
+    freetype \
+    freetype-dev \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    font-noto-emoji \
+    && rm -rf /var/cache/apk/*
 
 # Copy from builder
 COPY --from=builder /app/node_modules ./node_modules
@@ -40,6 +53,11 @@ WORKDIR /app
 
 # Regenerate Prisma to fix architecture-specific binary
 RUN cd apps/api && npm run db:generate 2>/dev/null || npx prisma generate 2>/dev/null || true
+
+# Install Playwright browsers (Chromium)
+# Set environment variable to use system Chromium
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
 # Run migrations and start server
 ENV NODE_ENV=production

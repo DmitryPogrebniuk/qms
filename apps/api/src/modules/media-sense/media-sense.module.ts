@@ -8,6 +8,7 @@ import { MediaSenseStreamService } from './media-sense-stream.service';
 import { MediaSenseClientService } from './media-sense-client.service';
 import { MediaSenseLogger } from './media-sense-logger.service';
 import { MediaSenseSyncService } from './media-sense-sync.service';
+import { MediaSenseCookieService } from './media-sense-cookie.service';
 import { MediaSenseIntegrationController } from './media-sense-integration.controller';
 import { OpenSearchModule } from '../opensearch/opensearch.module';
 import { AuthModule } from '../auth/auth.module';
@@ -28,6 +29,7 @@ import { AuthModule } from '../auth/auth.module';
     MediaSenseClientService,
     MediaSenseLogger,
     MediaSenseSyncService,
+    MediaSenseCookieService,
   ],
   exports: [
     MediaSenseIngestionService,
@@ -35,6 +37,7 @@ import { AuthModule } from '../auth/auth.module';
     MediaSenseClientService,
     MediaSenseLogger,
     MediaSenseSyncService,
+    MediaSenseCookieService,
   ],
 })
 export class MediaSenseModule {}

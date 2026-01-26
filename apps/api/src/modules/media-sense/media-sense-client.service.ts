@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosError } from 'axios';
 import https from 'https';
 import { MediaSenseLogger } from './media-sense-logger.service';
+import { MediaSenseCookieService } from './media-sense-cookie.service';
 
 /**
  * MediaSense API Client
@@ -105,6 +106,8 @@ export class MediaSenseClientService {
   constructor(
     private readonly configService: ConfigService,
     private readonly msLogger: MediaSenseLogger,
+    @Inject(forwardRef(() => MediaSenseCookieService))
+    private readonly cookieService?: MediaSenseCookieService,
   ) {}
 
   /**
@@ -398,7 +401,67 @@ export class MediaSenseClientService {
         error: (error as Error).message,
       });
 
+      // If all API authentication methods failed, try web interface automation
+      if (this.cookieService) {
+        try {
+          this.msLogger.info(`[${requestId}] API authentication failed, trying web interface automation`);
+          return this.loginViaWebInterface(requestId);
+        } catch (webError) {
+          this.msLogger.warn(`[${requestId}] Web interface automation also failed`, {
+            error: (webError as Error).message,
+          });
+        }
+      }
+
       return this.loginAlternative(requestId);
+    }
+  }
+
+  /**
+   * Login via web interface automation (Playwright)
+   * Fallback when API authentication doesn't work
+   */
+  private async loginViaWebInterface(requestId: string): Promise<MediaSenseSession> {
+    if (!this.config || !this.cookieService) {
+      throw new Error('Client or cookie service not configured');
+    }
+
+    const startTime = Date.now();
+
+    try {
+      // Get JSESSIONID from web interface
+      const cookieResult = await this.cookieService.getJSessionId(
+        this.config.baseUrl,
+        this.config.apiKey,
+        this.config.apiSecret,
+      );
+
+      this.session = {
+        sessionId: cookieResult.jsessionId,
+        cookies: cookieResult.cookies,
+        expiresAt: cookieResult.expiresAt,
+      };
+
+      const duration = Date.now() - startTime;
+      this.msLogger.info(`[${requestId}] Login successful via web interface automation`, {
+        requestId,
+        duration,
+        sessionIdMasked: this.maskSessionId(cookieResult.jsessionId),
+        expiresAt: cookieResult.expiresAt.toISOString(),
+      });
+
+      return this.session;
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      const errorMessage = (error as Error).message;
+
+      this.msLogger.error(`[${requestId}] Web interface login failed`, {
+        requestId,
+        duration,
+        error: errorMessage,
+      });
+
+      throw new Error(`Web interface login failed: ${errorMessage}`);
     }
   }
 
