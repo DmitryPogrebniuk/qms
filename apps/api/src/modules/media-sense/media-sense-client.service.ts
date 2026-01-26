@@ -1459,6 +1459,13 @@ export class MediaSenseClientService {
 
     const headers: Record<string, string> = {};
 
+    // Per Cisco MediaSense Developer Guide (9.x), JSESSIONID is passed as a HEADER parameter
+    // (not only as a Cookie). Newer web UI flows may use Cookie: JSESSIONID=..., so we send both
+    // when we have a real (non-basic) session id.
+    if (this.session.sessionId && !this.session.sessionId.startsWith('basic-')) {
+      headers['JSESSIONID'] = this.session.sessionId;
+    }
+
     // MediaSense 11.5 uses JSESSIONID (from reverse engineering)
     // Try JSESSIONID first (real format), then JSESSIONIDSSO as fallback
     const jsessionCookie = this.session.cookies.find(c => 
@@ -1471,6 +1478,10 @@ export class MediaSenseClientService {
         // Use JSESSIONID (MediaSense 11.5 format from reverse engineering)
         const cookieName = jsessionCookie.includes('JSESSIONIDSSO') ? 'JSESSIONIDSSO' : 'JSESSIONID';
         headers['Cookie'] = `${cookieName}=${jsessionId}`;
+        // Ensure header form is present too (some versions accept only header)
+        if (!this.session.sessionId.startsWith('basic-')) {
+          headers['JSESSIONID'] = jsessionId;
+        }
         // Also include Basic Auth as fallback (some endpoints may need both)
         const auth = Buffer.from(
           `${this.config.apiKey}:${this.config.apiSecret}`,
