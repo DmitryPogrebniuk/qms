@@ -268,8 +268,26 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
         backfillComplete: true,
       };
 
+      // Determine final status
+      let finalStatus: SyncStatus;
+      if (stats.errors > 0) {
+        finalStatus = SyncStatus.PARTIAL;
+      } else if (stats.fetched === 0 && checkpoint.lastSyncTime) {
+        // If we fetched 0 records but had a previous sync time, this might indicate an issue
+        // However, it could also mean there are simply no new records
+        finalStatus = SyncStatus.SUCCESS;
+        this.msLogger.warn(`[${correlationId}] Sync completed with 0 records fetched`, {
+          lastSyncTime: checkpoint.lastSyncTime,
+          fromTime: fromTime.toISOString(),
+          toTime: now.toISOString(),
+          note: 'This could indicate authentication issues or no new records available',
+        });
+      } else {
+        finalStatus = SyncStatus.SUCCESS;
+      }
+
       await this.updateSyncState(
-        stats.errors > 0 ? SyncStatus.PARTIAL : SyncStatus.SUCCESS,
+        finalStatus,
         newCheckpoint,
         stats,
         Date.now() - startTime,
@@ -502,11 +520,14 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
       if (!response.success || !response.data) {
         // Check if error is due to invalid session (4021)
         if (response.error?.includes('4021') || response.error?.includes('Invalid session')) {
-          this.msLogger.error(`[${correlationId}] MediaSense returned Invalid session (4021) - JSESSIONIDSSO required`, {
+          this.msLogger.error(`[${correlationId}] MediaSense returned Invalid session (4021) - JSESSIONID cookie required`, {
             error: response.error,
             statusCode: response.statusCode,
-            note: 'MediaSense 11.5 query endpoints require JSESSIONIDSSO cookie. Basic Auth may not work for query endpoints.',
-            recommendation: 'Check MediaSense server configuration or use alternative method to obtain JSESSIONIDSSO',
+            fromTime: fromTime.toISOString(),
+            toTime: toTime.toISOString(),
+            page,
+            note: 'MediaSense 11.5 query endpoints require JSESSIONID cookie. Basic Auth may not work for query endpoints.',
+            recommendation: 'Playwright automation should obtain JSESSIONID automatically. Check logs for CookieService errors.',
           });
         } else {
           this.msLogger.warn(`[${correlationId}] No sessions returned from MediaSense`, {
@@ -515,6 +536,7 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
             fromTime: fromTime.toISOString(),
             toTime: toTime.toISOString(),
             page,
+            recommendation: 'Check if MediaSense has records in this time range, or if authentication is working',
           });
         }
         return [];
