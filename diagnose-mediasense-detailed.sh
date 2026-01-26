@@ -12,20 +12,83 @@ echo ""
 
 # Get MediaSense config from DB
 echo "[INFO] Отримання конфігурації MediaSense з БД..."
-CONFIG=$(sudo docker compose -f infra/docker-compose.yml exec -T postgres psql -U qms -d qms -t -c "SELECT settings::text FROM \"IntegrationSetting\" WHERE \"integrationType\" = 'mediasense' LIMIT 1" 2>/dev/null | tr -d ' ')
 
-if [ -z "$CONFIG" ] || [ "$CONFIG" = "" ]; then
+# Try both possible database users
+DB_USER="qms"
+SETTING_EXISTS=$(sudo docker compose -f infra/docker-compose.yml exec -T postgres psql -U "$DB_USER" -d qms -t -c "SELECT COUNT(*) FROM \"IntegrationSetting\" WHERE \"integrationType\" = 'mediasense'" 2>/dev/null | tr -d ' \n' || echo "0")
+
+# If failed, try qms_user
+if [ "$SETTING_EXISTS" = "0" ] || [ -z "$SETTING_EXISTS" ]; then
+  DB_USER="qms_user"
+  SETTING_EXISTS=$(sudo docker compose -f infra/docker-compose.yml exec -T postgres psql -U "$DB_USER" -d qms -t -c "SELECT COUNT(*) FROM \"IntegrationSetting\" WHERE \"integrationType\" = 'mediasense'" 2>/dev/null | tr -d ' \n' || echo "0")
+fi
+
+if [ "$SETTING_EXISTS" = "0" ] || [ -z "$SETTING_EXISTS" ]; then
   echo "[ERROR] MediaSense не налаштовано в БД"
+  echo ""
+  echo "Для налаштування MediaSense:"
+  echo "  1. Відкрийте веб-інтерфейс: http://localhost:5173 (або ваш URL)"
+  echo "  2. Перейдіть до Settings → Integrations → MediaSense"
+  echo "  3. Введіть налаштування та збережіть"
+  echo ""
+  echo "Або через API:"
+  echo "  curl -X PUT http://localhost:3000/api/integrations/mediasense \\"
+  echo "    -H 'Authorization: Bearer YOUR_TOKEN' \\"
+  echo "    -H 'Content-Type: application/json' \\"
+  echo "    -d '{\"apiUrl\":\"https://192.168.200.133:8440\",\"apiKey\":\"user\",\"apiSecret\":\"pass\",\"allowSelfSigned\":true}'"
+  echo ""
   exit 1
 fi
 
+# Get settings JSON
+CONFIG=$(sudo docker compose -f infra/docker-compose.yml exec -T postgres psql -U "$DB_USER" -d qms -t -A -c "SELECT settings::text FROM \"IntegrationSetting\" WHERE \"integrationType\" = 'mediasense' LIMIT 1" 2>/dev/null | head -1)
+
+if [ -z "$CONFIG" ] || [ "$CONFIG" = "" ] || [ "$CONFIG" = "{}" ]; then
+  echo "[ERROR] MediaSense налаштовано, але settings порожні"
+  echo ""
+  echo "Перевірте налаштування в БД:"
+  echo "  sudo docker compose -f infra/docker-compose.yml exec -T postgres psql -U qms -d qms -c \"SELECT * FROM \\\"IntegrationSetting\\\" WHERE \\\"integrationType\\\" = 'mediasense';\""
+  echo ""
+  exit 1
+fi
+
+# Check if enabled
+IS_ENABLED=$(sudo docker compose -f infra/docker-compose.yml exec -T postgres psql -U "$DB_USER" -d qms -t -A -c "SELECT \"isEnabled\" FROM \"IntegrationSetting\" WHERE \"integrationType\" = 'mediasense' LIMIT 1" 2>/dev/null | tr -d ' \n' || echo "false")
+
+if [ "$IS_ENABLED" != "t" ] && [ "$IS_ENABLED" != "true" ]; then
+  echo "[WARN] MediaSense налаштовано, але не увімкнено (isEnabled = false)"
+  echo ""
+fi
+
 # Extract config values (basic parsing)
-API_URL=$(echo "$CONFIG" | grep -o '"apiUrl":"[^"]*"' | cut -d'"' -f4 || echo "")
-API_USER=$(echo "$CONFIG" | grep -o '"apiKey":"[^"]*"' | cut -d'"' -f4 || echo "")
-API_PASS=$(echo "$CONFIG" | grep -o '"apiSecret":"[^"]*"' | cut -d'"' -f4 || echo "")
+# Handle both JSON format and escaped JSON
+API_URL=$(echo "$CONFIG" | grep -oE '"apiUrl"\s*:\s*"[^"]*"' | grep -oE '"[^"]*"' | head -1 | tr -d '"' || echo "")
+API_USER=$(echo "$CONFIG" | grep -oE '"apiKey"\s*:\s*"[^"]*"' | grep -oE '"[^"]*"' | head -1 | tr -d '"' || echo "")
+API_PASS=$(echo "$CONFIG" | grep -oE '"apiSecret"\s*:\s*"[^"]*"' | grep -oE '"[^"]*"' | head -1 | tr -d '"' || echo "")
+
+# Alternative parsing if first method didn't work
+if [ -z "$API_URL" ]; then
+  API_URL=$(echo "$CONFIG" | sed -n 's/.*"apiUrl":"\([^"]*\)".*/\1/p' | head -1)
+fi
+if [ -z "$API_USER" ]; then
+  API_USER=$(echo "$CONFIG" | sed -n 's/.*"apiKey":"\([^"]*\)".*/\1/p' | head -1)
+fi
+if [ -z "$API_PASS" ]; then
+  API_PASS=$(echo "$CONFIG" | sed -n 's/.*"apiSecret":"\([^"]*\)".*/\1/p' | head -1)
+fi
 
 if [ -z "$API_URL" ] || [ -z "$API_USER" ] || [ -z "$API_PASS" ]; then
-  echo "[ERROR] Не вдалося отримати конфігурацію"
+  echo "[ERROR] Не вдалося отримати конфігурацію з БД"
+  echo ""
+  echo "Raw config from DB:"
+  echo "$CONFIG" | head -5
+  echo ""
+  echo "Перевірте налаштування вручну:"
+  echo "  sudo docker compose -f infra/docker-compose.yml exec -T postgres psql -U $DB_USER -d qms -c \"SELECT * FROM \\\"IntegrationSetting\\\" WHERE \\\"integrationType\\\" = 'mediasense';\""
+  echo ""
+  echo "Або налаштуйте MediaSense через веб-інтерфейс:"
+  echo "  http://localhost:5173 (Settings → Integrations → MediaSense)"
+  echo ""
   exit 1
 fi
 
