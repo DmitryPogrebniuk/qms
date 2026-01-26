@@ -395,6 +395,18 @@ export class MediaSenseClientService {
             responseBody: this.truncateData(responseBody, 200),
             note: 'MediaSense 11.5 may require different authentication method',
           });
+
+          // If API login succeeded but did not provide a session cookie/header, try web UI automation before falling back
+          if (this.cookieService) {
+            try {
+              this.msLogger.info(`[${requestId}] No session cookie from API login, trying web interface automation (Playwright)`);
+              return await this.loginViaWebInterface(requestId);
+            } catch (webError) {
+              this.msLogger.error(`[${requestId}] Web interface automation failed after missing cookie`, {
+                error: (webError as Error).message,
+              });
+            }
+          }
         }
       } else if (hasError) {
         this.msLogger.warn(`[${requestId}] Login returned error in response body`, {
@@ -403,6 +415,18 @@ export class MediaSenseClientService {
           responseCode: responseBody?.responseCode,
           message: responseBody?.responseMessage,
         });
+
+        // If API login returns an application-level error (e.g., 4021), try web UI automation before alternative login
+        if (this.cookieService) {
+          try {
+            this.msLogger.info(`[${requestId}] API login returned error responseCode=${responseBody?.responseCode}, trying web interface automation (Playwright)`);
+            return await this.loginViaWebInterface(requestId);
+          } catch (webError) {
+            this.msLogger.error(`[${requestId}] Web interface automation failed after API error response`, {
+              error: (webError as Error).message,
+            });
+          }
+        }
       }
 
       // If primary fails, try alternative endpoint
@@ -599,6 +623,18 @@ export class MediaSenseClientService {
             note: 'Will use Basic Auth header for all API requests. Query endpoints may require JSESSIONIDSSO cookie.',
             warning: 'If query endpoints return 4021, JSESSIONIDSSO cookie is required but not available from MediaSense server',
           });
+
+          // IMPORTANT: before falling back to Basic Auth-only session, try web UI automation to obtain JSESSIONID
+          if (this.cookieService) {
+            try {
+              this.msLogger.info(`[${requestId}] No session cookie from serviceInfo, trying web interface automation (Playwright)`);
+              return await this.loginViaWebInterface(requestId);
+            } catch (webError) {
+              this.msLogger.error(`[${requestId}] Web interface automation failed after serviceInfo`, {
+                error: (webError as Error).message,
+              });
+            }
+          }
 
           // Create session with Basic Auth - we'll use Authorization header for all requests
           this.session = {

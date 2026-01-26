@@ -85,6 +85,9 @@ services:
       NODE_ENV: development
       API_PORT: 3000
       DATABASE_URL: postgresql://qms_user:qms_password_secure@postgres:5432/qms
+      # Playwright (MediaSense web UI automation)
+      PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: /usr/bin/chromium
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
       REDIS_HOST: redis
       REDIS_PORT: 6379
       KEYCLOAK_ISSUER: http://keycloak:8080

@@ -23,7 +23,21 @@ FROM node:18-slim
 WORKDIR /app
 
 # Install runtime dependencies
-RUN apt-get update && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+# NOTE: Playwright is used for MediaSense web UI automation and requires Chromium + libs.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssl \
+    ca-certificates \
+    chromium \
+    fonts-liberation \
+    libnss3 \
+    libxss1 \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libgtk-3-0 \
+    libdrm2 \
+    libgbm1 \
+    libxshmfence1 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy package files
 COPY apps/api/package.json ./
@@ -41,6 +55,10 @@ COPY apps/api/tsconfig.json ./
 
 # Generate Prisma Client
 RUN npx prisma generate || true
+
+# Use system Chromium in container (avoid downloading browsers)
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
 ENV NODE_ENV=production
 EXPOSE 3000
