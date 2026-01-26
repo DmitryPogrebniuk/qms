@@ -609,11 +609,19 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
           : (raw.startTime || raw.sessionStartTime);
         
         // Calculate endTime from startTime + duration
+        // MediaSense 11.5 provides sessionDuration at session level, or trackDuration in tracks
         let endTime = raw.endTime || raw.sessionEndTime;
-        if (!endTime && raw.sessionStartDate && raw.tracks?.[0]?.trackDuration) {
-          const duration = raw.tracks[0].trackDuration; // milliseconds
-          endTime = new Date(raw.sessionStartDate + duration).toISOString();
+        if (!endTime && raw.sessionStartDate) {
+          // Prefer sessionDuration (session level), then trackDuration (first track)
+          const duration = raw.sessionDuration || raw.tracks?.[0]?.trackDuration;
+          if (duration) {
+            endTime = new Date(raw.sessionStartDate + duration).toISOString();
+          }
         }
+        
+        // Calculate duration in seconds (prefer sessionDuration, then trackDuration)
+        const durationMs = raw.sessionDuration || raw.tracks?.[0]?.trackDuration || raw.duration;
+        const durationSeconds = durationMs ? durationMs / 1000 : undefined;
         
         // MediaSense field mapping (based on real API response)
         return {
@@ -621,7 +629,7 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
           recordingId: raw.recordingId || raw.mediaId,
           startTime: startTime,
           endTime: endTime,
-          duration: raw.duration || (raw.tracks?.[0]?.trackDuration ? raw.tracks[0].trackDuration / 1000 : undefined), // Convert ms to seconds
+          duration: durationSeconds,
           direction: this.normalizeDirection(raw.direction || raw.callDirection),
           ani: raw.ani || raw.callerNumber || raw.fromNumber,
           dnis: raw.dnis || raw.calledNumber || raw.toNumber,
@@ -639,7 +647,9 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
           wrapUpCode: raw.wrapUpCode || raw.wrapUp?.code,
           dispositionCode: raw.dispositionCode || raw.disposition,
           extension: raw.extension || raw.agentExtension,
-          contactId: raw.contactId || raw.contact?.id || raw.tracks?.[0]?.participants?.[0]?.xRefCi,
+          contactId: raw.contactId || raw.contact?.id || 
+                     raw.tracks?.[0]?.participants?.[0]?.xRefCi ||
+                     raw.tracks?.[1]?.participants?.[0]?.xRefCi, // Check both tracks
           callId: raw.callId || raw.call?.id,
           transferCount: raw.transferCount || raw.transfers || 0,
           holdTime: raw.holdTime || raw.holdDuration || 0,
@@ -677,17 +687,27 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
 
   private normalizeParticipants(participants?: any[]): MediaSenseSessionData['participants'] {
     if (!Array.isArray(participants)) return [];
-    return participants.map(p => ({
-      type: p.type || p.role || 'unknown',
-      id: p.id || p.participantId || p.deviceId || p.deviceRef,
-      name: p.name || p.displayName,
-      phoneNumber: p.phoneNumber || p.number || p.dn || p.deviceId,
-      deviceName: p.deviceName || p.device || p.deviceRef,
-      joinTime: p.joinTime || p.participantStartDate 
-        ? (p.participantStartDate ? new Date(p.participantStartDate).toISOString() : (p.joinTime || p.startTime))
-        : (p.joinTime || p.startTime),
-      leaveTime: p.leaveTime || p.endTime,
-    }));
+    return participants.map(p => {
+      // MediaSense 11.5 format: deviceRef is phone number, deviceId is device identifier
+      const phoneNumber = p.phoneNumber || p.number || p.dn || p.deviceRef;
+      const deviceId = p.deviceId || p.deviceRef;
+      
+      // Calculate leaveTime from participantStartDate + participantDuration
+      let leaveTime = p.leaveTime || p.endTime;
+      if (!leaveTime && p.participantStartDate && p.participantDuration) {
+        leaveTime = new Date(p.participantStartDate + p.participantDuration).toISOString();
+      }
+      
+      return {
+        type: p.type || p.role || 'unknown',
+        id: p.id || p.participantId || deviceId,
+        name: p.name || p.displayName,
+        phoneNumber: phoneNumber,
+        deviceName: p.deviceName || p.device || deviceId,
+        joinTime: p.joinTime || (p.participantStartDate ? new Date(p.participantStartDate).toISOString() : p.startTime),
+        leaveTime: leaveTime,
+      };
+    });
   }
 
   private normalizeMedia(media?: any, urls?: any): MediaSenseSessionData['media'] {
