@@ -169,7 +169,6 @@ async function main() {
       transferCount: 0,
       holdTimeSeconds: 120,
       isArchived: false,
-      rawJson: { custom: 'metadata' },
     },
   })
 
@@ -196,8 +195,7 @@ async function main() {
               id: 'q-2',
               text: 'Was issue resolved on first contact?',
               weight: 2,
-              maxScore: 5,
-              isFatal: true,
+          isArchived: false,
               allowNA: false,
             },
           ],
