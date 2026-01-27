@@ -5,22 +5,12 @@ Production-ready MVP for on-premise Linux deployment. Integrated with Cisco UCCX
 ## 🎯 Features
 
 ### Core Capabilities
-- **Secure Access Control**: RBAC with OIDC/Keycloak integration
-- **Unified Interaction View**: Voice recordings + chat interactions
-- **Quality Evaluations**: Versioned scorecards, workflow management
-- **Coaching Plans**: Action items with tracking
-- **Sampling Engine**: Rules-based QA sampling
-- **Secure Audio Streaming**: Proxy to MediaSense with Range support
-- **Multi-language UI**: Ukrainian/English interface
 
+## 📄 Additional Documentation
+
+- [Cisco Mediasense Dev Guide (PDF)](docs/Cisco_Mediasense_Dev_Guide.pdf)
 ### UCCX Integration (Source of Truth)
 - **High Availability Support**: Automatic failover between UCCX nodes
-- Directory sync: Teams, agents, skills
-- Historical statistics (daily aggregated)
-- Incremental + full sync strategies
-- Automatic retry/backoff with exponential backoff
-- Round-robin load distribution
-
 ### MediaSense Integration
 - Incremental metadata ingestion
 - Recording timeline metadata

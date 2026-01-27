@@ -84,18 +84,13 @@ export class MediaSenseClientService {
   // Configurable endpoints for MediaSense 11.5.1.12001-8
   // Based on Cisco MediaSense Developer Guide Release 11.0+
   private readonly endpoints = {
-    // Authentication endpoints
-    login: '/ora/authenticationService/authentication/login',
-    logout: '/ora/authenticationService/authentication/logout',
-    // Java form-based authentication (j_security_check) - primary method for 11.5
-    loginForm: '/j_security_check',
-    // Alternative auth endpoints
-    loginAlt: '/ora/authenticate',
+    // Authentication endpoints (per Dev Guide)
+    signIn: '/ora/authenticationService/authentication/signIn',
+    signOut: '/ora/authenticationService/authentication/signOut',
     // Service info / health check
     serviceInfo: '/ora/serviceInfo',
     serviceInfoAlt: '/ora/queryService/query/serviceInfo',
     // Query service (MediaSense 11.5 uses this endpoint)
-    // Real endpoint from reverse engineering: /ora/queryService/query/getSessions
     querySessions: '/ora/queryService/query/getSessions',
     querySessionsAlt: '/ora/queryService/query/sessions', // Fallback
     querySessionById: '/ora/queryService/query/sessionBySessionId',
@@ -243,7 +238,7 @@ export class MediaSenseClientService {
     const requestId = this.generateRequestId();
     const startTime = Date.now();
 
-    this.msLogger.info(`[${requestId}] Attempting MediaSense login`, {
+    this.msLogger.info(`[${requestId}] Attempting MediaSense login (signIn endpoint)`, {
       requestId,
       baseUrl: this.maskSensitiveUrl(this.config.baseUrl),
       hasCookieService: !!this.cookieService,
@@ -251,7 +246,6 @@ export class MediaSenseClientService {
     });
 
     // TEMPORARY WORKAROUND: If manual JSESSIONID is provided, use it directly
-    // This is for testing purposes until we resolve the API authentication issue
     if (this.config.manualJSessionId) {
       this.msLogger.warn(`[${requestId}] Using manually provided JSESSIONID (temporary workaround)`, {
         requestId,
@@ -267,194 +261,114 @@ export class MediaSenseClientService {
       return this.session;
     }
 
-    // Try multiple authentication strategies
-    const auth = Buffer.from(
-      `${this.config.apiKey}:${this.config.apiSecret}`,
-    ).toString('base64');
-
-    // Strategy 1: Java form-based authentication (j_security_check)
-    // This is the standard Java servlet authentication endpoint
-    // For MediaSense 11.5, this is the recommended method
+    // Основний спосіб: POST на signIn endpoint з requestParameters
     try {
-      const formData = new URLSearchParams();
-      formData.append('j_username', this.config.apiKey);
-      formData.append('j_password', this.config.apiSecret);
-
-      const formResponse = await this.axiosInstance.post(
-        this.endpoints.loginForm,
-        formData.toString(),
+      const response = await this.axiosInstance.post(
+        this.endpoints.signIn,
+        {
+          requestParameters: {
+            username: this.config.apiKey,
+            password: this.config.apiSecret,
+          },
+        },
         {
           headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'User-Agent': 'MediaSense-API-Client/1.0',
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
           },
-          maxRedirects: 0, // Don't follow redirects automatically
-          validateStatus: (status) => status >= 200 && status < 400, // Accept 200, 302, etc.
+          validateStatus: () => true, // Не кидати помилку по статусу
         },
       );
 
-      // Axios in Node.js returns Set-Cookie headers as array or string
-      const setCookieHeaders = formResponse.headers['set-cookie'] || [];
-      const cookies = Array.isArray(setCookieHeaders) 
-        ? setCookieHeaders 
+      // Перевірити наявність JSESSIONID у cookie
+      const setCookieHeaders = response.headers['set-cookie'] || [];
+      const cookies = Array.isArray(setCookieHeaders)
+        ? setCookieHeaders
         : [setCookieHeaders].filter(Boolean);
       const jsessionId = this.extractJSessionId(cookies);
 
-      if (jsessionId) {
-        // For MediaSense 11.5, JSESSIONIDSSO is preferred
-        const cookieType = cookies.some(c => c.includes('JSESSIONIDSSO')) ? 'JSESSIONIDSSO' : 'JSESSIONID';
-        
+      const responseBody = response.data as MediaSenseApiResponse;
+      const hasError = responseBody?.responseCode && responseBody.responseCode !== 2000 && responseBody.responseCode !== 0;
+
+      if ((response.status === 200 || response.status === 201) && jsessionId && !hasError) {
         this.session = {
           sessionId: jsessionId,
           cookies,
           expiresAt: new Date(Date.now() + 30 * 60 * 1000),
         };
 
-        this.msLogger.info(`[${requestId}] Login successful (j_security_check)`, {
+        this.msLogger.info(`[${requestId}] Login successful (signIn)`, {
           requestId,
           duration: Date.now() - startTime,
           sessionIdMasked: this.maskSessionId(jsessionId),
-          cookieType,
-          status: formResponse.status,
         });
 
         return this.session;
       } else {
-        // Log detailed info for debugging MediaSense 11.5
-        this.msLogger.debug(`[${requestId}] j_security_check response details`, {
-          status: formResponse.status,
-          headers: Object.keys(formResponse.headers),
-          setCookieHeaders: cookies.length > 0 ? 'present' : 'missing',
-          location: formResponse.headers['location'],
-        });
-      }
-      } catch (error) {
-        const axiosError = error as AxiosError;
-        // j_security_check might not be available, continue to next strategy
-        this.msLogger.warn(`[${requestId}] j_security_check failed`, {
-          error: (error as Error).message,
-          status: axiosError.response?.status,
-          statusText: axiosError.response?.statusText,
-          url: axiosError.config?.url,
-        });
-      }
-
-    // Strategy 2: POST with Basic Auth header
-    // For MediaSense 11.5, try with both Basic Auth and JSON body
-    try {
-      const response = await this.axiosInstance.post(
-        this.endpoints.login,
-        {
-          username: this.config.apiKey,
-          password: this.config.apiSecret,
-        },
-        {
-          headers: {
-            Authorization: `Basic ${auth}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-          validateStatus: () => true, // Don't throw on any status
-        },
-      );
-
-      // Check response body for errors even if status is 200
-      // MediaSense 11.5 format: { responseCode, responseMessage, responseBody }
-      const responseBody = response.data as MediaSenseApiResponse;
-      const hasError = responseBody?.responseCode && responseBody.responseCode !== 2000 && responseBody.responseCode !== 0;
-      
-      if ((response.status === 200 || response.status === 201) && !hasError) {
-        // Axios in Node.js returns Set-Cookie headers as array or string
-        const setCookieHeaders = response.headers['set-cookie'] || [];
-        const cookies = Array.isArray(setCookieHeaders) 
-          ? setCookieHeaders 
-          : [setCookieHeaders].filter(Boolean);
-        const jsessionId = this.extractJSessionId(cookies);
-
-        if (jsessionId) {
-          this.session = {
-            sessionId: jsessionId,
-            cookies,
-            expiresAt: new Date(Date.now() + 30 * 60 * 1000), // 30 min default
-          };
-
-          this.msLogger.info(`[${requestId}] Login successful`, {
-            requestId,
-            duration: Date.now() - startTime,
-            sessionIdMasked: this.maskSessionId(jsessionId),
-          });
-
-          return this.session;
-        } else {
-          // For MediaSense 11.5, log detailed info about missing cookie
-          this.msLogger.warn(`[${requestId}] Login returned 200 but no JSESSIONIDSSO/JSESSIONID cookie`, {
-            requestId,
-            cookies: cookies.length,
-            cookieHeaders: cookies.length > 0 ? cookies.map(c => c.substring(0, 50)) : 'none',
-            responseBody: this.truncateData(responseBody, 200),
-            note: 'MediaSense 11.5 may require different authentication method',
-          });
-
-          // If API login succeeded but did not provide a session cookie/header, try web UI automation before falling back
-          if (this.cookieService) {
-            try {
-              this.msLogger.info(`[${requestId}] No session cookie from API login, trying web interface automation (Playwright)`);
-              return await this.loginViaWebInterface(requestId);
-            } catch (webError) {
-              this.msLogger.error(`[${requestId}] Web interface automation failed after missing cookie`, {
-                error: (webError as Error).message,
-              });
-            }
-          }
-        }
-      } else if (hasError) {
-        this.msLogger.warn(`[${requestId}] Login returned error in response body`, {
+        this.msLogger.warn(`[${requestId}] Login failed or no JSESSIONID cookie`, {
           requestId,
           status: response.status,
-          responseCode: responseBody?.responseCode,
-          message: responseBody?.responseMessage,
+          cookies: cookies.length,
+          responseBody: this.truncateData(responseBody, 200),
         });
-
-        // If API login returns an application-level error (e.g., 4021), try web UI automation before alternative login
+        // fallback на playwright/web-автоматизацію якщо є
         if (this.cookieService) {
           try {
-            this.msLogger.info(`[${requestId}] API login returned error responseCode=${responseBody?.responseCode}, trying web interface automation (Playwright)`);
+            this.msLogger.info(`[${requestId}] No session cookie from API login, trying web interface automation (Playwright)`);
             return await this.loginViaWebInterface(requestId);
           } catch (webError) {
-            this.msLogger.error(`[${requestId}] Web interface automation failed after API error response`, {
+            this.msLogger.error(`[${requestId}] Web interface automation failed after missing cookie`, {
               error: (webError as Error).message,
             });
           }
         }
+        throw new Error('Login failed: No JSESSIONID cookie');
       }
-
-      // If primary fails, try alternative endpoint
-      return this.loginAlternative(requestId);
     } catch (error) {
-      this.msLogger.warn(`[${requestId}] Primary login failed, trying alternative`, {
-        requestId,
+      this.msLogger.error(`[${requestId}] signIn endpoint failed`, {
         error: (error as Error).message,
       });
-
-      // If all API authentication methods failed, try web interface automation
+      // fallback на playwright/web-автоматизацію якщо є
       if (this.cookieService) {
         try {
-          this.msLogger.info(`[${requestId}] All API authentication methods failed, trying web interface automation (Playwright)`);
+          this.msLogger.info(`[${requestId}] signIn failed, trying web interface automation (Playwright)`);
           return await this.loginViaWebInterface(requestId);
         } catch (webError) {
-          const webErrorMsg = (webError as Error).message;
-          this.msLogger.error(`[${requestId}] Web interface automation failed`, {
-            error: webErrorMsg,
-            stack: (webError as Error).stack,
+          this.msLogger.error(`[${requestId}] Web interface automation failed after signIn`, {
+            error: (webError as Error).message,
           });
-          // Continue to alternative login, but log that web interface also failed
         }
-      } else {
-        this.msLogger.warn(`[${requestId}] CookieService not available, skipping web interface automation`);
       }
-
-      return this.loginAlternative(requestId);
+      throw new Error('Login failed: signIn endpoint and web automation failed');
+    }
+  }
+  /**
+   * Logout (signOut) - POST на /ora/authenticationService/authentication/signOut з JSESSIONID у заголовку
+   */
+  async logout(): Promise<void> {
+    if (!this.axiosInstance || !this.session) {
+      throw new Error('Client not configured or not logged in');
+    }
+    const requestId = this.generateRequestId();
+    try {
+      await this.axiosInstance.post(
+        this.endpoints.signOut,
+        {},
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'JSESSIONID': this.session.sessionId,
+            'Cookie': `JSESSIONID=${this.session.sessionId}`,
+          },
+        },
+      );
+      this.msLogger.info(`[${requestId}] Logout successful`);
+      this.session = null;
+    } catch (error) {
+      this.msLogger.error(`[${requestId}] Logout failed`, {
+        error: (error as Error).message,
+      });
+      throw error;
     }
   }
 

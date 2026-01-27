@@ -153,14 +153,7 @@ cisco-qms/
 - **Environment Isolation**: Dev, staging, production configs
 
 ### ✅ Documentation
-- **API Docs**: 28 endpoints with request/response examples
-- **Architecture Guide**: Design decisions + rationale
-- **Deployment Guide**: Production setup + scaling
-- **Developer Guide**: Setup, testing, debugging
-- **Contributing Guidelines**: Code standards + PR process
-
-## 🔐 Security Features
-
+| [Cisco Mediasense Dev Guide (PDF)](docs/Cisco_Mediasense_Dev_Guide.pdf) | Mediasense API & integration reference |
 - ✅ TLS/HTTPS everywhere
 - ✅ JWT token validation on every request
 - ✅ RBAC enforcement at route + service layers
