@@ -27,6 +27,11 @@ services:
   # Redis Cache
   redis:
     image: redis:7-alpine
+          logging:
+            driver: "json-file"
+            options:
+              max-size: "50m"
+              max-file: "5"
     container_name: qms-redis
     ports:
       - "6379:6379"
@@ -62,6 +67,11 @@ services:
         driver: "json-file"
         options:
           max-size: "50m"
+          logging:
+            driver: "json-file"
+            options:
+              max-size: "50m"
+              max-file: "5"
           max-file: "5"
 
   # Keycloak (OIDC Provider)
@@ -134,6 +144,11 @@ services:
       - ../packages/shared/src:/app/packages/shared/src
       - api_exports:/app/exports  # Persistent storage for audio exports
     networks:
+          logging:
+            driver: "json-file"
+            options:
+              max-size: "50m"
+              max-file: "5"
       - qms_network
       logging:
         driver: "json-file"
@@ -149,6 +164,11 @@ services:
     container_name: qms-web
     ports:
       - "5173:5173"
+          logging:
+            driver: "json-file"
+            options:
+              max-size: "50m"
+              max-file: "5"
     volumes:
       - ../apps/web/src:/app/apps/web/src
     networks:
@@ -165,6 +185,11 @@ services:
   nginx:
     image: nginx:alpine
     container_name: qms-nginx
+          logging:
+            driver: "json-file"
+            options:
+              max-size: "50m"
+              max-file: "5"
     ports:
       - "80:80"
       - "443:443"
