@@ -4,20 +4,13 @@ import * as bcrypt from 'bcrypt'
 const prisma = new PrismaClient()
 
 async function main() {
-  console.log('Starting database seed...')
-
-  // Clean existing data
-  await prisma.evaluation.deleteMany()
-  await prisma.recording.deleteMany()
-  await prisma.agentSkill.deleteMany()
-  // Debug: print DATABASE_URL
   console.log('DATABASE_URL:', process.env.DATABASE_URL);
 
-  // Clean existing data
-  await prisma.evaluation.deleteMany();
-  await prisma.recording.deleteMany();
-    // Clean existing users
-    await prisma.user.deleteMany();
+  // Clean existing users
+  await prisma.user.deleteMany();
+
+  // Create only the boss user for a clean test
+  const hashedPassword = await bcrypt.hash('boss', 10);
   try {
     await prisma.user.create({
       data: {
@@ -37,9 +30,7 @@ async function main() {
   // Print users after seed
   const users = await prisma.user.findMany();
   console.log('Users after seed:', users);
-  // Create admin user
-  await prisma.user.create({
-    data: {
+}
 
 main()
   .catch((e) => {
