@@ -10,6 +10,9 @@ async function main() {
   await prisma.evaluation.deleteMany()
   await prisma.recording.deleteMany()
   await prisma.agentSkill.deleteMany()
+  // Debug: print DATABASE_URL
+  console.log('DATABASE_URL:', process.env.DATABASE_URL);
+
   // Clean existing data
   await prisma.evaluation.deleteMany();
   await prisma.recording.deleteMany();
@@ -22,18 +25,25 @@ async function main() {
 
   // Create only the boss user for a clean test
   const hashedPassword = await bcrypt.hash('boss', 10);
-  await prisma.user.create({
-    data: {
-      username: 'boss',
-      password: hashedPassword,
-      email: 'boss@localhost',
-      fullName: 'Boss Admin',
-      role: 'ADMIN',
-      isActive: true,
-    },
-  });
+  try {
+    await prisma.user.create({
+      data: {
+        username: 'boss',
+        password: hashedPassword,
+        email: 'boss@localhost',
+        fullName: 'Boss Admin',
+        role: 'ADMIN',
+        isActive: true,
+      },
+    });
+    console.log('✅ Only boss user created: boss / boss');
+  } catch (e) {
+    console.error('User creation error:', e);
+  }
 
-  console.log('✅ Only boss user created: boss / boss');
+  // Print users after seed
+  const users = await prisma.user.findMany();
+  console.log('Users after seed:', users);
   // Create admin user
   await prisma.user.create({
     data: {
