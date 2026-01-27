@@ -18,20 +18,15 @@ services:
       retries: 5
     networks:
       - qms_network
-      logging:
-        driver: "json-file"
-        options:
-          max-size: "50m"
-          max-file: "5"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   # Redis Cache
   redis:
     image: redis:7-alpine
-          logging:
-            driver: "json-file"
-            options:
-              max-size: "50m"
-              max-file: "5"
     container_name: qms-redis
     ports:
       - "6379:6379"
@@ -63,16 +58,11 @@ services:
       - opensearch_data:/usr/share/opensearch/data
     networks:
       - qms_network
-      logging:
-        driver: "json-file"
-        options:
-          max-size: "50m"
-          logging:
-            driver: "json-file"
-            options:
-              max-size: "50m"
-              max-file: "5"
-          max-file: "5"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   # Keycloak (OIDC Provider)
   keycloak:
