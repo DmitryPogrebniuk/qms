@@ -20,7 +20,6 @@ interface OpenSearchConfig {
   username: string
   password: string
   indexPrefix: string
-  enabled: boolean
   tls: boolean
 }
 
@@ -33,7 +32,6 @@ export default function OpenSearchSettings() {
     username: '',
     password: '',
     indexPrefix: 'qms',
-    enabled: true,
     tls: false,
   })
   const [loading, setLoading] = useState(true)
@@ -65,7 +63,16 @@ export default function OpenSearchSettings() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      await client.put('/integrations/opensearch', config)
+      // Only send allowed fields
+      const { host, port, username, password, indexPrefix, tls } = config
+      await client.put('/integrations/opensearch', {
+        host,
+        port,
+        username,
+        password,
+        indexPrefix,
+        tls,
+      })
       setMessage({ type: 'success', text: t('admin.settingsSaved') })
       setTimeout(() => setMessage(null), 5000)
     } catch (error) {
@@ -181,7 +188,6 @@ export default function OpenSearchSettings() {
               username: '',
               password: '',
               indexPrefix: 'qms',
-              enabled: true,
               tls: false,
             })
           }}
