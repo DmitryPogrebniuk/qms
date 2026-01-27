@@ -33,7 +33,12 @@ export class IntegrationsController {
   @ApiOperation({ summary: 'Update integration configuration' })
   @Roles(Role.ADMIN)
   async updateIntegration(@Param('type') type: string, @Body() settings: any) {
-    return this.integrationsService.updateIntegration(type, settings)
+    // Debug: log incoming payload
+    console.log(`[DEBUG] Received integration config for type=${type}:`, settings);
+    const result = await this.integrationsService.updateIntegration(type, settings);
+    // Debug: log DB result
+    console.log(`[DEBUG] Saved integration config for type=${type}:`, result);
+    return result;
   }
 
   @Post(':type/test')
