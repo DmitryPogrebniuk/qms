@@ -134,17 +134,12 @@ services:
       - ../packages/shared/src:/app/packages/shared/src
       - api_exports:/app/exports  # Persistent storage for audio exports
     networks:
-          logging:
-            driver: "json-file"
-            options:
-              max-size: "50m"
-              max-file: "5"
       - qms_network
-      logging:
-        driver: "json-file"
-        options:
-          max-size: "50m"
-          max-file: "5"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   # React Frontend
   web:
@@ -154,32 +149,22 @@ services:
     container_name: qms-web
     ports:
       - "5173:5173"
-          logging:
-            driver: "json-file"
-            options:
-              max-size: "50m"
-              max-file: "5"
     volumes:
       - ../apps/web/src:/app/apps/web/src
     networks:
       - qms_network
     depends_on:
       - api
-      logging:
-        driver: "json-file"
-        options:
-          max-size: "50m"
-          max-file: "5"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   # Nginx Reverse Proxy
   nginx:
     image: nginx:alpine
     container_name: qms-nginx
-          logging:
-            driver: "json-file"
-            options:
-              max-size: "50m"
-              max-file: "5"
     ports:
       - "80:80"
       - "443:443"
@@ -191,11 +176,11 @@ services:
       - web
     networks:
       - qms_network
-      logging:
-        driver: "json-file"
-        options:
-          max-size: "50m"
-          max-file: "5"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
 
 volumes:
   postgres_data:
