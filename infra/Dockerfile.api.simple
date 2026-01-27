@@ -19,6 +19,7 @@ RUN npm run build || echo "Build may fail, will use ts-node"
 
 # Runtime stage
 FROM node:18-slim
+RUN npm install -g npm@10
 
 WORKDIR /app
 

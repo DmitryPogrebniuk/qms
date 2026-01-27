@@ -87,6 +87,7 @@ export class MediaSenseClientService {
     // Authentication endpoints (per Dev Guide)
     signIn: '/ora/authenticationService/authentication/signIn',
     signOut: '/ora/authenticationService/authentication/signOut',
+    login: '/ora/authenticationService/authentication/login', // Added for compatibility with loginAlternative
     // Service info / health check
     serviceInfo: '/ora/serviceInfo',
     serviceInfoAlt: '/ora/queryService/query/serviceInfo',
