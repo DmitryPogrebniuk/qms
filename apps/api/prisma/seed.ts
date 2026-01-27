@@ -10,95 +10,30 @@ async function main() {
   await prisma.evaluation.deleteMany()
   await prisma.recording.deleteMany()
   await prisma.agentSkill.deleteMany()
-  await prisma.agentTeam.deleteMany()
-  await prisma.agent.deleteMany()
-  await prisma.skill.deleteMany()
-  await prisma.team.deleteMany()
-  await prisma.user.deleteMany()
+  // Clean existing data
+  await prisma.evaluation.deleteMany();
+  await prisma.recording.deleteMany();
+  await prisma.agentSkill.deleteMany();
+  await prisma.agentTeam.deleteMany();
+  await prisma.agent.deleteMany();
+  await prisma.skill.deleteMany();
+  await prisma.team.deleteMany();
+  await prisma.user.deleteMany();
 
-  // Create teams
-  const team1 = await prisma.team.create({
+  // Create only the boss user for a clean test
+  const hashedPassword = await bcrypt.hash('boss', 10);
+  await prisma.user.create({
     data: {
-      teamCode: 'BILLING',
-      displayName: 'Billing Support Team',
-      supervisorIds: ['supervisor-1'],
+      username: 'boss',
+      password: hashedPassword,
+      email: 'boss@localhost',
+      fullName: 'Boss Admin',
+      role: 'ADMIN',
+      isActive: true,
     },
-  })
+  });
 
-  const team2 = await prisma.team.create({
-    data: {
-      teamCode: 'SUPPORT',
-      displayName: 'Technical Support Team',
-      supervisorIds: ['supervisor-2'],
-    },
-  })
-
-  // Create agents
-  const agent1 = await prisma.agent.create({
-    data: {
-      agentId: 'agent001',
-      fullName: 'John Smith',
-      email: 'john.smith@company.com',
-      activeFlag: true,
-    },
-  })
-
-  const agent2 = await prisma.agent.create({
-    data: {
-      agentId: 'agent002',
-      fullName: 'Jane Doe',
-      email: 'jane.doe@company.com',
-      activeFlag: true,
-    },
-  })
-
-  // Assign agents to teams
-  await prisma.agentTeam.create({
-    data: {
-      agentId: agent1.id,
-      teamId: team1.id,
-    },
-  })
-
-  await prisma.agentTeam.create({
-    data: {
-      agentId: agent2.id,
-      teamId: team2.id,
-    },
-  })
-
-  // Create skills
-  const skill1 = await prisma.skill.create({
-    data: {
-      skillId: 'SKILL_BILLING',
-      skillName: 'Billing',
-    },
-  })
-
-  const skill2 = await prisma.skill.create({
-    data: {
-      skillId: 'SKILL_TECHNICAL',
-      skillName: 'Technical Support',
-    },
-  })
-
-  // Assign skills to agents
-  await prisma.agentSkill.create({
-    data: {
-      agentId: agent1.id,
-      skillId: skill1.id,
-      proficiency: 9,
-    },
-  })
-
-  await prisma.agentSkill.create({
-    data: {
-      agentId: agent2.id,
-      skillId: skill2.id,
-      proficiency: 8,
-    },
-  })
-
+  console.log('✅ Only boss user created: boss / boss');
   // Create admin user
   await prisma.user.create({
     data: {
