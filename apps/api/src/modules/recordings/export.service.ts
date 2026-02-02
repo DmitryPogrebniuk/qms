@@ -116,13 +116,14 @@ export class ExportService implements OnModuleInit {
       };
     }
 
-    // Get recording info
+    // Get recording info (hasAudio or audioUrl = can stream/download)
     const recording = await this.prisma.recording.findUnique({
       where: { id: recordingId },
-      select: { durationSeconds: true, audioFormat: true, hasAudio: true },
+      select: { durationSeconds: true, audioFormat: true, hasAudio: true, audioUrl: true },
     });
 
-    if (!recording || !recording.hasAudio) {
+    const canStream = recording && (recording.hasAudio || Boolean(recording.audioUrl));
+    if (!canStream) {
       return { status: 'error', error: 'Recording has no audio' };
     }
 

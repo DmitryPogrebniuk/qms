@@ -654,25 +654,39 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
         const durationMs = raw.sessionDuration || raw.tracks?.[0]?.trackDuration || raw.duration;
         const durationSeconds = durationMs ? durationMs / 1000 : undefined;
         
-        // ANI/DNIS: MediaSense 11.5 often has no top-level ani/dnis. ANI = хто дзвонив (caller), DNIS = куди дзвонив (called).
-        // Учасники: перший = caller (ANI), другий = called (DNIS). Не дублювати — при одному учаснику лише ANI.
-        const participants = raw.tracks?.[0]?.participants || raw.participants || [];
-        let ani = raw.ani || raw.callerNumber || raw.fromNumber;
-        let dnis = raw.dnis || raw.calledNumber || raw.toNumber;
+        // ANI/DNIS: MediaSense 11.5 — ANI = caller (хто дзвонив), DNIS = called (куди дзвонив).
+        // Можливі два треки: tracks[0] = зовнішній абонент, tracks[1] = агент/черга. Беремо з обох треків.
+        let ani = raw.ani || raw.callerNumber || raw.fromNumber || raw.originatingNumber;
+        let dnis = raw.dnis || raw.calledNumber || raw.toNumber || raw.destinationNumber;
+        const track0Participants = raw.tracks?.[0]?.participants || [];
+        const track1Participants = raw.tracks?.[1]?.participants || [];
+        const participants = track0Participants.length > 0 ? track0Participants : (raw.participants || []);
+        if (!ani && track0Participants.length >= 1) {
+          const p0 = track0Participants[0];
+          ani = p0.deviceRef || p0.phoneNumber || p0.number || p0.dn || p0.deviceId;
+        }
         if (!ani && participants.length >= 1) {
           const p0 = participants[0];
-          ani = p0.deviceRef || p0.phoneNumber || p0.number || p0.dn;
+          ani = p0.deviceRef || p0.phoneNumber || p0.number || p0.dn || p0.deviceId;
+        }
+        if (!dnis && track1Participants.length >= 1) {
+          const p1 = track1Participants[0];
+          dnis = p1.deviceRef || p1.phoneNumber || p1.number || p1.dn || p1.deviceId;
         }
         if (!dnis && participants.length >= 2) {
           const p1 = participants[1];
-          dnis = p1.deviceRef || p1.phoneNumber || p1.number || p1.dn;
+          dnis = p1.deviceRef || p1.phoneNumber || p1.number || p1.dn || p1.deviceId;
         }
-        // При одному учаснику DNIS не ставимо = ANI (це різні поля)
+        // Ніколи не дублювати ANI в DNIS — при одному учаснику DNIS лишаємо порожнім або з іншого джерела
+        if (dnis === ani) dnis = undefined;
 
-        // Напрямок: якщо немає з API — визначаємо за довжиною номера. Короткий→довгий = Вихідний, довгий→короткий = Вхідний.
+        // Напрямок: з API, або за довжиною ANI/DNIS, або при одному учаснику — за deviceId (trunk → inbound).
         let direction = this.normalizeDirection(raw.direction || raw.callDirection);
         if (direction === 'unknown' && ani && dnis && ani !== dnis) {
           direction = this.inferDirectionFromAniDnis(ani, dnis);
+        }
+        if (direction === 'unknown' && (ani || dnis)) {
+          direction = this.inferDirectionFromSingleParticipant(raw);
         }
 
         // MediaSense field mapping (based on real API response)
@@ -753,6 +767,20 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
     return 'unknown';
   }
 
+  /**
+   * При одному учаснику: якщо deviceId містить trunk/Trunk — типовий вхідний дзвінок на агента.
+   */
+  private inferDirectionFromSingleParticipant(raw: any): string {
+    const participants = raw.tracks?.[0]?.participants || raw.participants || [];
+    if (participants.length < 1) return 'unknown';
+    const p0 = participants[0];
+    const deviceId = String(p0.deviceId || p0.deviceRef || '').toLowerCase();
+    if (deviceId.includes('trunk') || deviceId.includes('gateway') || deviceId.includes('pstn')) {
+      return 'inbound';
+    }
+    return 'unknown';
+  }
+
   private normalizeParticipants(participants?: any[]): MediaSenseSessionData['participants'] {
     if (!Array.isArray(participants)) return [];
     return participants.map(p => {
@@ -779,26 +807,29 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
   }
 
   private normalizeMedia(media?: any, urls?: any): MediaSenseSessionData['media'] {
-    if (!media && !urls) return { hasAudio: false };
-    
-    // Handle array of tracks (MediaSense 11.5 format)
-    const track = Array.isArray(media) ? media[0] : media;
-    
-    // MediaSense 11.5 provides urls object with httpUrl, mp4Url, wavUrl, rtspUrl
-    // Prefer wavUrl for audio, mp4Url for video, httpUrl as fallback
-    const mediaUrl = urls?.wavUrl || urls?.mp4Url || urls?.httpUrl || 
-                     track?.url || track?.mediaUrl || track?.audioUrl || track?.downloadUrl;
-    
+    // MediaSense 11.5: urls at session level (wavUrl, mp4Url, httpUrl); or track.downloadUrl
+    const track = media && (Array.isArray(media) ? media[0] : media);
+    const mediaUrl =
+      urls?.wavUrl ||
+      urls?.mp4Url ||
+      urls?.httpUrl ||
+      track?.downloadUrl ||
+      track?.url ||
+      track?.mediaUrl ||
+      track?.audioUrl;
+
+    const hasAudio = Boolean(mediaUrl || track?.trackMediaType === 'AUDIO');
+
     return {
-      hasAudio: Boolean(mediaUrl || track?.trackMediaType === 'AUDIO'),
+      hasAudio,
       codec: track?.codec || track?.audioCodec,
       sampleRate: track?.sampleRate || track?.audioSampleRate,
       bitrate: track?.bitrate || track?.audioBitrate,
       channels: track?.channels || 1,
-      format: track?.format || track?.container || track?.fileType || 
-              (urls?.wavUrl ? 'wav' : urls?.mp4Url ? 'mp4' : undefined),
+      format: track?.format || track?.container || track?.fileType ||
+        (urls?.wavUrl ? 'wav' : urls?.mp4Url ? 'mp4' : undefined),
       size: track?.size || track?.fileSize,
-      url: mediaUrl,
+      url: mediaUrl || undefined,
     };
   }
 

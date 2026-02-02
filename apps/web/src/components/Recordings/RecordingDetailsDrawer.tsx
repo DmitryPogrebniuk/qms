@@ -287,8 +287,8 @@ export const RecordingDetailsDrawer: React.FC<RecordingDetailsDrawerProps> = ({
         </IconButton>
       </Box>
 
-      {/* Audio Player */}
-      {recording.hasAudio && (
+      {/* Audio Player — show when hasAudio or mediasenseSessionId (backend will try stream) */}
+      {(recording.hasAudio || recording.mediasenseSessionId) && (
         <Paper sx={{ m: 2, p: 2, bgcolor: 'grey.100' }} elevation={0}>
           <audio ref={audioRef} src={getStreamUrl(recording.id)} preload="metadata" />
 

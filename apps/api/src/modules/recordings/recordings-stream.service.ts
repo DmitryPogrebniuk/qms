@@ -142,7 +142,27 @@ export class RecordingsStreamService {
       throw new NotFoundException('Recording not found');
     }
 
-    const canStream = recording.hasAudio || Boolean(recording.audioUrl);
+    let audioUrl = recording.audioUrl;
+    let canStream = recording.hasAudio || Boolean(audioUrl);
+
+    // If no URL yet but we have sessionId, try to get media URL from MediaSense once
+    if (!canStream && recording.mediasenseSessionId) {
+      await this.ensureClientConfigured();
+      try {
+        const mediaInfo = await this.mediaSenseClient.getMediaUrl(recording.mediasenseSessionId);
+        if (mediaInfo.success && mediaInfo.data) {
+          await this.prisma.recording.update({
+            where: { id: recordingId },
+            data: { hasAudio: true, audioUrl: mediaInfo.data, mediaCheckedAt: new Date() },
+          });
+          audioUrl = mediaInfo.data;
+          canStream = true;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
     if (!canStream) {
       throw new NotFoundException('No audio available for this recording');
     }
@@ -153,9 +173,9 @@ export class RecordingsStreamService {
 
     try {
       // Prefer direct URL from sync (MediaSense 11.5 urls.wavUrl) when available
-      if (recording.audioUrl) {
+      if (audioUrl) {
         const streamResult = await this.mediaSenseClient.streamFromUrl(
-          recording.audioUrl,
+          audioUrl,
           rangeHeader,
         );
         return {
