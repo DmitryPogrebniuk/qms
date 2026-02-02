@@ -529,14 +529,16 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
             note: 'MediaSense 11.5 query endpoints require JSESSIONID cookie. Basic Auth may not work for query endpoints.',
             recommendation: 'Playwright automation should obtain JSESSIONID automatically. Check logs for CookieService errors.',
           });
+          this.logger.log(
+            `[Sync] MediaSense 4021: no JSESSIONID. Use Settings → Integrations → test connection, or set MEDIASENSE_JSESSIONID. Check MediaSense logs.`,
+          );
         } else {
-          this.msLogger.warn(`[${correlationId}] No sessions returned from MediaSense`, {
+          this.msLogger.info(`[${correlationId}] No sessions from MediaSense (check date range or auth)`, {
             error: response.error,
             statusCode: response.statusCode,
             fromTime: fromTime.toISOString(),
             toTime: toTime.toISOString(),
             page,
-            recommendation: 'Check if MediaSense has records in this time range, or if authentication is working',
           });
         }
         return [];
@@ -1163,6 +1165,95 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
       isSyncing: this.isSyncing,
       syncEnabled: this.syncEnabled,
     };
+  }
+
+  /**
+   * Get sync diagnostics for troubleshooting (config, state, DB count, test fetch from MediaSense)
+   */
+  async getSyncDiagnostics(): Promise<{
+    config: { enabled: boolean; apiUrlMasked?: string };
+    syncState: { backfillComplete: boolean; lastSyncTime?: string; status?: string; totalFetched: number; totalCreated: number } | null;
+    recordingCount: number;
+    testFetch: { fromTime: string; toTime: string; count: number; error?: string; hint?: string };
+  }> {
+    const config = await this.getMediaSenseConfig();
+    const state = await this.prisma.syncState.findUnique({
+      where: { syncType: this.SYNC_TYPE },
+    });
+    const recordingCount = await this.prisma.recording.count();
+
+    const checkpoint = state?.checkpoint as SyncCheckpoint | null;
+    const testFetch = {
+      fromTime: '',
+      toTime: '',
+      count: 0,
+      error: undefined as string | undefined,
+      hint: undefined as string | undefined,
+    };
+
+    const toTime = new Date();
+    const fromTime = new Date(toTime.getTime() - 24 * 60 * 60 * 1000);
+    testFetch.fromTime = fromTime.toISOString();
+    testFetch.toTime = toTime.toISOString();
+
+    if (config?.enabled) {
+      try {
+        await this.configureClient();
+        const response = await this.mediaSenseClient.querySessions({
+          startTime: fromTime.toISOString(),
+          endTime: toTime.toISOString(),
+          limit: 10,
+          offset: 0,
+        });
+
+        if (!response.success) {
+          testFetch.error = response.error || 'Unknown error';
+          if (response.error?.includes('4021') || response.error?.includes('Invalid session')) {
+            testFetch.hint = 'JSESSIONID required. Ensure Playwright/CookieService can log in to MediaSense web UI, or set MEDIASENSE_JSESSIONID.';
+          }
+        } else if (response.data) {
+          const data = response.data as any;
+          const sessions = data?.responseBody?.sessions ?? data?.sessions ?? (Array.isArray(data) ? data : []);
+          testFetch.count = Array.isArray(sessions) ? sessions.length : 0;
+          if (testFetch.count === 0) {
+            testFetch.hint = 'MediaSense returned 0 sessions for last 24h. Check date range or if MediaSense has recordings.';
+          }
+        }
+      } catch (err) {
+        testFetch.error = (err as Error).message;
+        testFetch.hint = 'Check MediaSense URL, credentials, and network.';
+      }
+    } else {
+      testFetch.error = 'MediaSense not configured or disabled';
+      testFetch.hint = 'Configure in Settings → Integrations → MediaSense.';
+    }
+
+    return {
+      config: {
+        enabled: Boolean(config?.enabled),
+        apiUrlMasked: config?.apiUrl ? this.maskUrl(config.apiUrl) : undefined,
+      },
+      syncState: state
+        ? {
+            backfillComplete: Boolean(checkpoint?.backfillComplete),
+            lastSyncTime: checkpoint?.lastSyncTime ?? undefined,
+            status: state.status ?? undefined,
+            totalFetched: state.totalFetched ?? 0,
+            totalCreated: state.totalCreated ?? 0,
+          }
+        : null,
+      recordingCount,
+      testFetch,
+    };
+  }
+
+  private maskUrl(url: string): string {
+    try {
+      const u = new URL(url);
+      return `${u.protocol}//${u.hostname}:${u.port || '443'}`;
+    } catch {
+      return '***';
+    }
   }
 
   private delay(ms: number): Promise<void> {

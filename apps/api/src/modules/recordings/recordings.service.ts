@@ -172,6 +172,13 @@ export class RecordingsService {
   }
 
   /**
+   * Get sync diagnostics for troubleshooting (config, state, DB count, test fetch)
+   */
+  async getSyncDiagnostics() {
+    return this.syncService.getSyncDiagnostics();
+  }
+
+  /**
    * Enforce row-level security
    */
   private async _enforceAccess(recording: any, userId: string, userRole: string): Promise<void> {

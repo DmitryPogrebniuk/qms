@@ -32,6 +32,8 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import ErrorIcon from '@mui/icons-material/Error'
 import WarningIcon from '@mui/icons-material/Warning'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
+import BuildIcon from '@mui/icons-material/Build'
+import { getSyncDiagnostics, type SyncDiagnostics } from '../../services/recordingsApi'
 
 interface MediaSenseConfig {
   apiUrl: string
@@ -83,6 +85,10 @@ export default function MediaSenseSettings() {
   // Test connection state
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<TestResult | null>(null)
+
+  // Sync diagnostics state
+  const [diagnosticsLoading, setDiagnosticsLoading] = useState(false)
+  const [diagnosticsResult, setDiagnosticsResult] = useState<SyncDiagnostics | null>(null)
 
   // Logs state
   const [logs, setLogs] = useState<LogEntry[]>([])
@@ -354,7 +360,75 @@ export default function MediaSenseSettings() {
         >
           {t('mediaSense.testConnection', 'Test Connection')}
         </Button>
+        <Button
+          variant="outlined"
+          onClick={async () => {
+            setDiagnosticsLoading(true)
+            setDiagnosticsResult(null)
+            try {
+              const data = await getSyncDiagnostics()
+              setDiagnosticsResult(data)
+            } catch (e) {
+              console.error('Sync diagnostics failed', e)
+              setMessage({ type: 'error', text: t('mediaSense.diagnosticsFailed', 'Failed to load sync diagnostics') })
+            } finally {
+              setDiagnosticsLoading(false)
+            }
+          }}
+          disabled={diagnosticsLoading}
+          startIcon={diagnosticsLoading ? <CircularProgress size={20} /> : <BuildIcon />}
+        >
+          {t('mediaSense.syncDiagnostics', 'Sync diagnostics')}
+        </Button>
       </Box>
+
+      {/* Sync diagnostics result */}
+      {diagnosticsResult && (
+        <Paper sx={{ mt: 3, p: 2, bgcolor: '#f5f5f5' }}>
+          <Typography variant="subtitle1" fontWeight="bold" sx={{ mb: 2 }}>
+            {t('mediaSense.syncDiagnostics', 'Sync diagnostics')}
+          </Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={6}>
+              <Typography variant="body2" color="text.secondary">
+                {t('mediaSense.configEnabled', 'MediaSense configured')}: {diagnosticsResult.config.enabled ? '✓' : '✗'}
+                {diagnosticsResult.config.apiUrlMasked && ` (${diagnosticsResult.config.apiUrlMasked})`}
+              </Typography>
+              {diagnosticsResult.syncState && (
+                <>
+                  <Typography variant="body2" color="text.secondary">
+                    Backfill complete: {diagnosticsResult.syncState.backfillComplete ? '✓' : '✗'}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Last sync: {diagnosticsResult.syncState.lastSyncTime || '—'} · Status: {diagnosticsResult.syncState.status || '—'}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Fetched / Created: {diagnosticsResult.syncState.totalFetched} / {diagnosticsResult.syncState.totalCreated}
+                  </Typography>
+                </>
+              )}
+              <Typography variant="body2" color="text.secondary">
+                {t('mediaSense.recordingsInDb', 'Recordings in DB')}: <strong>{diagnosticsResult.recordingCount}</strong>
+              </Typography>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Typography variant="body2" color="text.secondary">
+                Test fetch (last 24h): <strong>{diagnosticsResult.testFetch.count}</strong> sessions
+              </Typography>
+              {diagnosticsResult.testFetch.error && (
+                <Alert severity="error" sx={{ mt: 1 }}>
+                  {diagnosticsResult.testFetch.error}
+                </Alert>
+              )}
+              {diagnosticsResult.testFetch.hint && (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  {diagnosticsResult.testFetch.hint}
+                </Typography>
+              )}
+            </Grid>
+          </Grid>
+        </Paper>
+      )}
 
       {/* Test Result */}
       {testResult && (

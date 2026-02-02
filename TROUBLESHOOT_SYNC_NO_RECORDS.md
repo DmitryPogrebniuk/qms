@@ -7,7 +7,31 @@
 - В інтерфейсі: "Записи не знайдено"
 - Backfill обробляє батчі, але не отримує записів
 
-## Діагностика
+## Швидка діагностика: GET /api/recordings/admin/sync-diagnostics
+
+**Адмін-ендпоінт** повертає все в одному запиті (потрібен JWT з роллю ADMIN):
+
+```bash
+curl -s "http://localhost:3000/api/recordings/admin/sync-diagnostics" \
+  -H "Authorization: Bearer YOUR_JWT"
+```
+
+**Що повертається:**
+- `config.enabled` — чи налаштовано MediaSense
+- `config.apiUrlMasked` — URL сервера (без credentials)
+- `syncState` — backfillComplete, lastSyncTime, status, totalFetched, totalCreated
+- `recordingCount` — кількість записів у БД
+- `testFetch` — тестовий запит до MediaSense за останні 24 год:
+  - `count` — скільки сесій повернув MediaSense (якщо 0 — перевірити `error` та `hint`)
+  - `error` — текст помилки (наприклад 4021 Invalid session)
+  - `hint` — рекомендація (наприклад: JSESSIONID required, Playwright/CookieService)
+
+**Як інтерпретувати:**
+- `testFetch.error` з "4021" або "Invalid session" → потрібен JSESSIONID: увімкніть Playwright (CookieService) або встановіть `MEDIASENSE_JSESSIONID`
+- `testFetch.count === 0` і немає `error` → у MediaSense немає записів за останні 24 год або невірний діапазон дат
+- `recordingCount === 0` і `totalCreated === 0` → синхронізація нічого ще не створила; спочатку виправити `testFetch`
+
+## Діагностика вручну
 
 ### 1. Перевірка даних в БД
 

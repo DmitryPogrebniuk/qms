@@ -346,7 +346,7 @@ export async function getSyncStatus(): Promise<SyncStatus> {
  * Trigger manual sync (admin only)
  */
 export async function triggerSync(): Promise<{ message: string }> {
-  const response = await httpClient.post<{ message: string }>('/recordings/admin/sync-trigger');
+  const response = await httpClient.post<{ message: string }>('/recordings/admin/sync-now');
   return response.data;
 }
 
@@ -355,6 +355,36 @@ export async function triggerSync(): Promise<{ message: string }> {
  */
 export async function resetSync(backfillDays?: number): Promise<{ message: string }> {
   const response = await httpClient.post<{ message: string }>('/recordings/admin/sync-reset', { backfillDays });
+  return response.data;
+}
+
+/**
+ * Sync diagnostics response (admin only)
+ */
+export interface SyncDiagnostics {
+  config: { enabled: boolean; apiUrlMasked?: string };
+  syncState: {
+    backfillComplete: boolean;
+    lastSyncTime?: string;
+    status?: string;
+    totalFetched: number;
+    totalCreated: number;
+  } | null;
+  recordingCount: number;
+  testFetch: {
+    fromTime: string;
+    toTime: string;
+    count: number;
+    error?: string;
+    hint?: string;
+  };
+}
+
+/**
+ * Get sync diagnostics for troubleshooting (admin only)
+ */
+export async function getSyncDiagnostics(): Promise<SyncDiagnostics> {
+  const response = await httpClient.get<SyncDiagnostics>('/recordings/admin/sync-diagnostics');
   return response.data;
 }
 

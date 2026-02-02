@@ -459,6 +459,16 @@ export class RecordingsController {
     return this.recordingsService.resetSync();
   }
 
+  /**
+   * Get sync diagnostics for troubleshooting (admin only)
+   */
+  @Get('admin/sync-diagnostics')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Get MediaSense sync diagnostics (Admin only)' })
+  async getSyncDiagnostics() {
+    return this.recordingsService.getSyncDiagnostics();
+  }
+
   // ============================================================================
   // Helpers
   // ============================================================================
