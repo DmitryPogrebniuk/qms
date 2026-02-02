@@ -21,6 +21,8 @@ export interface DownloadResult {
   stream?: Readable;
   contentType?: string;
   contentLength?: number;
+  /** When fallback to source format (e.g. wav) instead of requested mp3 */
+  actualFormat?: string;
   jobId?: string;
   error?: string;
 }
@@ -139,9 +141,16 @@ export class ExportService implements OnModuleInit {
       };
     }
 
-    // Need transcoding
+    // Need transcoding — якщо ffmpeg немає, віддаємо вихідний формат (WAV)
     if (!this.ffmpegAvailable) {
-      return { status: 'error', error: 'Transcoding not available' };
+      const streamResult = await this.streamService.streamAudio(recordingId);
+      return {
+        status: 'ready',
+        stream: streamResult.stream,
+        contentType: 'audio/wav',
+        contentLength: streamResult.contentLength,
+        actualFormat: 'wav',
+      };
     }
 
     // Small file - transcode synchronously

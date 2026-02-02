@@ -243,8 +243,9 @@ export class RecordingsController {
     );
 
     if (downloadResult.status === 'ready') {
-      // File is ready - stream it
-      const filename = this.buildFilename(recording, format);
+      // File is ready - stream it (actualFormat when fallback to WAV without ffmpeg)
+      const outFormat = downloadResult.actualFormat || format;
+      const filename = this.buildFilename(recording, outFormat);
       
       res.setHeader('Content-Type', downloadResult.contentType!);
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);

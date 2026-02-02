@@ -24,10 +24,11 @@ RUN npm install -g npm@10
 WORKDIR /app
 
 # Install runtime dependencies
-# NOTE: Playwright is used for MediaSense web UI automation and requires Chromium + libs.
+# NOTE: Playwright for MediaSense; ffmpeg for MP3 export.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl \
     ca-certificates \
+    ffmpeg \
     chromium \
     fonts-liberation \
     libnss3 \
