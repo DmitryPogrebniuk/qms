@@ -42,7 +42,16 @@ export default function OpenSearchSettings() {
     const loadSettings = async () => {
       try {
         const response = await client.get('/integrations/opensearch')
-        setConfig(response.data)
+        // API returns { type, settings: { host, port, ... }, enabled, configured }
+        const s = response.data?.settings ?? {}
+        setConfig({
+          host: s.host ?? 'localhost',
+          port: typeof s.port === 'number' ? s.port : parseInt(String(s.port || 9200), 10) || 9200,
+          username: s.username ?? '',
+          password: s.password ?? '',
+          indexPrefix: s.indexPrefix ?? 'qms',
+          tls: Boolean(s.tls),
+        })
       } catch (error) {
         console.error('Failed to load OpenSearch settings:', error)
       } finally {

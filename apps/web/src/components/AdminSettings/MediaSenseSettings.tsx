@@ -327,7 +327,7 @@ export default function MediaSenseSettings() {
       </Grid>
 
       {/* Action Buttons */}
-      <Box sx={{ mt: 3, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+      <Box sx={{ mt: 3, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
         <Button
           variant="contained"
           onClick={handleSave}
@@ -360,8 +360,16 @@ export default function MediaSenseSettings() {
         >
           {t('mediaSense.testConnection', 'Test Connection')}
         </Button>
+      </Box>
+
+      {/* Sync diagnostics — окремий ряд для видимості */}
+      <Typography variant="subtitle2" color="text.secondary" sx={{ mt: 3, mb: 1 }}>
+        {t('mediaSense.syncDiagnosticsSection', 'Діагностика синхронізації (чому немає записів у пошуку)')}
+      </Typography>
+      <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
         <Button
           variant="outlined"
+          color="primary"
           onClick={async () => {
             setDiagnosticsLoading(true)
             setDiagnosticsResult(null)

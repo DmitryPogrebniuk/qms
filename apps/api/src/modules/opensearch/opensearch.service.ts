@@ -183,8 +183,12 @@ export class OpenSearchService implements OnModuleInit {
         body.aggs = query.aggs;
       }
 
+      // Use index with prefix so search hits the same index sync writes to (e.g. qms-recordings-*)
+      const indexName =
+        query.index?.startsWith(this.indexPrefix) ? query.index : `${this.indexPrefix}-recordings-*`;
+
       const response = await this.httpService.axiosRef.post(
-        `${this._getBaseUrl()}/${query.index}/_search`,
+        `${this._getBaseUrl()}/${indexName}/_search`,
         body,
         { headers: this._getHeaders() },
       );
