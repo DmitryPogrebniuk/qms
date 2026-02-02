@@ -60,27 +60,51 @@ docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U qms_user -d qms -t -c
 echo ""
 echo "✓ БД очищено від записів."
 
-# Опціонально: очистити індекс OpenSearch (щоб пошук не показував видалені записи)
-if [[ -n "${OPENSEARCH_HOST:-}" ]]; then
+# Очистити індекс OpenSearch (щоб пошук не показував видалені записи)
+echo ""
+echo "Очищення індексу OpenSearch (qms-recordings-*)..."
+
+OS_CLEANED=0
+
+# 1) З хоста: localhost:9200 (порт проброшений у docker-compose; security часто вимкнено)
+if curl -s -X POST "http://localhost:9200/qms-recordings-*/_delete_by_query" \
+  -H "Content-Type: application/json" \
+  -d '{"query":{"match_all":{}}}' 2>/dev/null | grep -qE '"failures":\[\]|"deleted"'; then
+  echo "✓ OpenSearch індекс очищено (localhost:9200)."
+  OS_CLEANED=1
+fi
+
+# 2) Якщо не вийшло — з .env (OPENSEARCH_HOST=opensearch з хоста не резолвиться, тому спробуємо localhost з auth)
+if [[ "$OS_CLEANED" -eq 0 && -n "${OPENSEARCH_HOST:-}" ]]; then
   OS_HOST="${OPENSEARCH_HOST}"
   OS_PORT="${OPENSEARCH_PORT:-9200}"
   [[ "${OPENSEARCH_USE_SSL:-false}" == "true" ]] && OS_PROTO="https" || OS_PROTO="http"
   OS_URL="${OS_PROTO}://${OS_HOST}:${OS_PORT}"
-  echo ""
-  echo "Очищення індексу OpenSearch (qms-recordings-*)..."
-  CURL_OPTS=(-s -X POST "${OS_URL}/qms-recordings-*/_delete_by_query" -H "Content-Type: application/json" -d '{"query":{"match_all":{}}}')
+  CURL_OPTS=(-s -k -X POST "${OS_URL}/qms-recordings-*/_delete_by_query" -H "Content-Type: application/json" -d '{"query":{"match_all":{}}}')
   if [[ -n "${OPENSEARCH_USERNAME:-}" && -n "${OPENSEARCH_PASSWORD:-}" ]]; then
     CURL_OPTS+=(-u "${OPENSEARCH_USERNAME}:${OPENSEARCH_PASSWORD}")
   fi
-  if curl -k "${CURL_OPTS[@]}" 2>/dev/null | grep -q '"failures":\[\]'; then
-    echo "✓ OpenSearch індекс очищено."
-  else
-    echo "Попередження: не вдалося очистити OpenSearch (перевірте OPENSEARCH_* у .env або виконайте вручну)."
+  if curl "${CURL_OPTS[@]}" 2>/dev/null | grep -qE '"failures":\[\]|"deleted"'; then
+    echo "✓ OpenSearch індекс очищено (${OS_HOST}:${OS_PORT})."
+    OS_CLEANED=1
   fi
-else
-  echo ""
-  echo "Попередження: OPENSEARCH_HOST не задано — індекс OpenSearch не очищено."
-  echo "Щоб пошук не показував старі записи, задайте OPENSEARCH_HOST у .env і перезапустіть скрипт."
+fi
+
+# 3) Якщо OPENSEARCH_HOST=opensearch (тільки всередині Docker), спробувати через api-контейнер
+if [[ "$OS_CLEANED" -eq 0 ]]; then
+  if docker compose -f "$COMPOSE_FILE" exec -T api sh -c 'command -v curl >/dev/null 2>&1' 2>/dev/null; then
+    if docker compose -f "$COMPOSE_FILE" exec -T api sh -c \
+      'curl -s -X POST "http://${OPENSEARCH_HOST:-opensearch}:${OPENSEARCH_PORT:-9200}/qms-recordings-*/_delete_by_query" -H "Content-Type: application/json" -u "${OPENSEARCH_USERNAME}:${OPENSEARCH_PASSWORD}" -d "{\"query\":{\"match_all\":{}}}"' 2>/dev/null | grep -qE '"failures":\[\]|"deleted"'; then
+      echo "✓ OpenSearch індекс очищено (через api-контейнер)."
+      OS_CLEANED=1
+    fi
+  fi
+fi
+
+if [[ "$OS_CLEANED" -eq 0 ]]; then
+  echo "Попередження: не вдалося очистити OpenSearch."
+  echo "Вручну (з хоста, якщо порт 9200 проброшений):"
+  echo "  curl -X POST 'http://localhost:9200/qms-recordings-*/_delete_by_query' -H 'Content-Type: application/json' -d '{\"query\":{\"match_all\":{}}}'"
 fi
 
 echo ""
