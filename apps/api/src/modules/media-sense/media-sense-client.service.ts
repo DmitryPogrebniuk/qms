@@ -8,22 +8,16 @@ import { MediaSenseCookieService } from './media-sense-cookie.service';
 /**
  * MediaSense API Client
  * Implements authentication and API calls to Cisco MediaSense
- * 
- * MediaSense API typically uses:
- * - Port 8440 for HTTPS API
- * - /ora/ prefix for API paths
- * - JSESSIONID cookie for session authentication (MediaSense 11.5 - from reverse engineering)
- * - JSESSIONIDSSO cookie as fallback (for some versions)
- * 
- * Real API format discovered via reverse engineering:
- * - Endpoint: /ora/queryService/query/getSessions (not /sessions)
- * - Request format: { requestParameters: [{ fieldName, fieldConditions, ... }] }
- * - Uses timestamps in milliseconds (not ISO strings)
- * - Response: { responseCode: 2000, responseMessage: "Success...", responseBody: { sessions: [...] } }
- * 
- * Reference: Cisco MediaSense Developer Guide Release 11.0+
- * Tested with: MediaSense 11.5.1.12001-8
- * Reverse engineered from: Web interface HAR analysis
+ *
+ * Compliance: Cisco MediaSense Developer Guide for Release 9.1(1) (PDF):
+ * - User Authentication: signIn API returns Set-Cookie: JSESSIONID; pass Cookie: JSESSIONID=... on subsequent requests.
+ * - POST body format: { requestParameters: { ... } } for signIn; { requestParameters: [ { fieldName, fieldConditions, ... } ] } for getSessions.
+ * - Response schema: responseCode (2xxx success), responseMessage, responseBody.
+ * - getSessions: POST, requestParameters array, fieldName/fieldConditions/fieldOperator/fieldValues/paramConnector; timestamps in milliseconds.
+ * - urls: httpUrl, rtspUrl, wavUrl (wavUrl only when sessionState = CLOSED_NORMAL); downloadUrl per track when CLOSED_NORMAL/AUDIO/trackSize>0.
+ *
+ * MediaSense API: Port 8440 HTTPS, /ora/ prefix; JSESSIONID for session auth.
+ * Tested with: MediaSense 11.5.1.12001-8 (getSessions format from reverse engineering; 9.1(1) doc uses same signIn/response schema).
  */
 
 export interface MediaSenseClientConfig {
@@ -239,7 +233,7 @@ export class MediaSenseClientService {
     const requestId = this.generateRequestId();
     const startTime = Date.now();
 
-    this.msLogger.info(`[${requestId}] Attempting MediaSense login (signIn endpoint)`, {
+    this.msLogger.info(`[${requestId}] Attempting MediaSense login (signIn → login → j_security_check → Playwright; per Cisco Developer Guide 9.1(1))`, {
       requestId,
       baseUrl: this.maskSensitiveUrl(this.config.baseUrl),
       hasCookieService: !!this.cookieService,
@@ -262,86 +256,156 @@ export class MediaSenseClientService {
       return this.session;
     }
 
-    // Основний спосіб: POST на signIn endpoint з requestParameters
+    // 1) Cisco MediaSense Developer Guide 9.1(1): signIn API — primary auth, returns Set-Cookie: JSESSIONID
+    //    POST /ora/authenticationService/authentication/signIn, body { requestParameters: { username, password } }
+    const signInSession = await this.trySignIn(requestId, startTime);
+    if (signInSession) return signInSession;
+
+    // 2) REST login (CURL/project docs): POST .../login, body { username, password }, Authorization: Basic
+    const docSession = await this.tryDocumentedLogin(requestId, startTime);
+    if (docSession) return docSession;
+
+    // 3) Java form-based: j_security_check, POST form j_username, j_password
+    const jsecSession = await this.tryJSecurityCheck(requestId, startTime);
+    if (jsecSession) return jsecSession;
+
+    // 4) Fallback: Playwright (веб-автоматизація)
+    if (this.cookieService) {
+      try {
+        this.msLogger.info(`[${requestId}] signIn/login/j_security_check failed, trying web interface automation (Playwright)`);
+        return await this.loginViaWebInterface(requestId);
+      } catch (webError) {
+        this.msLogger.error(`[${requestId}] Web interface automation failed`, {
+          error: (webError as Error).message,
+        });
+      }
+    }
+    throw new Error('Login failed: signIn endpoint and web automation failed');
+  }
+
+  /**
+   * Documented REST login: POST /ora/authenticationService/authentication/login
+   * Body: { username, password }, Authorization: Basic (MEDIASENSE_CURL_COMMANDS, MEDIASENSE_API_AUTHENTICATION)
+   */
+  private async tryDocumentedLogin(requestId: string, startTime: number): Promise<MediaSenseSession | null> {
     try {
-      const response = await this.axiosInstance.post(
-        this.endpoints.signIn,
-        {
-          requestParameters: {
-            username: this.config.apiKey,
-            password: this.config.apiSecret,
-          },
-        },
+      const auth = Buffer.from(`${this.config!.apiKey}:${this.config!.apiSecret}`).toString('base64');
+      const response = await this.axiosInstance!.post(
+        this.endpoints.login,
+        { username: this.config!.apiKey, password: this.config!.apiSecret },
         {
           headers: {
+            Authorization: `Basic ${auth}`,
             'Content-Type': 'application/json',
-            'Accept': 'application/json',
+            Accept: 'application/json',
           },
-          validateStatus: () => true, // Не кидати помилку по статусу
+          validateStatus: () => true,
         },
       );
-
-      // Перевірити наявність JSESSIONID у cookie
       const setCookieHeaders = response.headers['set-cookie'] || [];
-      const cookies = Array.isArray(setCookieHeaders)
-        ? setCookieHeaders
-        : [setCookieHeaders].filter(Boolean);
+      const cookies = Array.isArray(setCookieHeaders) ? setCookieHeaders : [setCookieHeaders].filter(Boolean);
       const jsessionId = this.extractJSessionId(cookies);
-
-      const responseBody = response.data as MediaSenseApiResponse;
-      const hasError = responseBody?.responseCode && responseBody.responseCode !== 2000 && responseBody.responseCode !== 0;
-
+      const body = response.data as MediaSenseApiResponse;
+      const hasError = body?.responseCode && body.responseCode !== 2000 && body.responseCode !== 0;
       if ((response.status === 200 || response.status === 201) && jsessionId && !hasError) {
         this.session = {
           sessionId: jsessionId,
           cookies,
           expiresAt: new Date(Date.now() + 30 * 60 * 1000),
         };
+        this.msLogger.info(`[${requestId}] Login successful (documented REST login)`, {
+          requestId,
+          duration: Date.now() - startTime,
+          sessionIdMasked: this.maskSessionId(jsessionId),
+        });
+        return this.session;
+      }
+    } catch (e) {
+      this.msLogger.debug(`[${requestId}] Documented REST login failed`, { error: (e as Error).message });
+    }
+    return null;
+  }
 
+  /**
+   * signIn endpoint: POST /ora/authenticationService/authentication/signIn
+   * Body: { requestParameters: { username, password } }
+   */
+  private async trySignIn(requestId: string, startTime: number): Promise<MediaSenseSession | null> {
+    try {
+      const response = await this.axiosInstance!.post(
+        this.endpoints.signIn,
+        {
+          requestParameters: {
+            username: this.config!.apiKey,
+            password: this.config!.apiSecret,
+          },
+        },
+        {
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          validateStatus: () => true,
+        },
+      );
+      const setCookieHeaders = response.headers['set-cookie'] || [];
+      const cookies = Array.isArray(setCookieHeaders) ? setCookieHeaders : [setCookieHeaders].filter(Boolean);
+      const jsessionId = this.extractJSessionId(cookies);
+      const responseBody = response.data as MediaSenseApiResponse;
+      const hasError = responseBody?.responseCode && responseBody.responseCode !== 2000 && responseBody.responseCode !== 0;
+      if ((response.status === 200 || response.status === 201) && jsessionId && !hasError) {
+        this.session = {
+          sessionId: jsessionId,
+          cookies,
+          expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+        };
         this.msLogger.info(`[${requestId}] Login successful (signIn)`, {
           requestId,
           duration: Date.now() - startTime,
           sessionIdMasked: this.maskSessionId(jsessionId),
         });
-
         return this.session;
-      } else {
-        this.msLogger.warn(`[${requestId}] Login failed or no JSESSIONID cookie`, {
-          requestId,
-          status: response.status,
-          cookies: cookies.length,
-          responseBody: this.truncateData(responseBody, 200),
-        });
-        // fallback на playwright/web-автоматизацію якщо є
-        if (this.cookieService) {
-          try {
-            this.msLogger.info(`[${requestId}] No session cookie from API login, trying web interface automation (Playwright)`);
-            return await this.loginViaWebInterface(requestId);
-          } catch (webError) {
-            this.msLogger.error(`[${requestId}] Web interface automation failed after missing cookie`, {
-              error: (webError as Error).message,
-            });
-          }
-        }
-        throw new Error('Login failed: No JSESSIONID cookie');
       }
-    } catch (error) {
-      this.msLogger.error(`[${requestId}] signIn endpoint failed`, {
-        error: (error as Error).message,
-      });
-      // fallback на playwright/web-автоматизацію якщо є
-      if (this.cookieService) {
-        try {
-          this.msLogger.info(`[${requestId}] signIn failed, trying web interface automation (Playwright)`);
-          return await this.loginViaWebInterface(requestId);
-        } catch (webError) {
-          this.msLogger.error(`[${requestId}] Web interface automation failed after signIn`, {
-            error: (webError as Error).message,
-          });
-        }
-      }
-      throw new Error('Login failed: signIn endpoint and web automation failed');
+    } catch (e) {
+      this.msLogger.debug(`[${requestId}] signIn failed`, { error: (e as Error).message });
     }
+    return null;
+  }
+
+  /**
+   * Java form-based auth (documentation: most reliable).
+   * POST /j_security_check, Content-Type: application/x-www-form-urlencoded, body: j_username=...&j_password=...
+   */
+  private async tryJSecurityCheck(requestId: string, startTime: number): Promise<MediaSenseSession | null> {
+    try {
+      const baseUrl = this.config!.baseUrl.replace(/\/$/, '');
+      const url = `${baseUrl}/j_security_check`;
+      const body = `j_username=${encodeURIComponent(this.config!.apiKey)}&j_password=${encodeURIComponent(this.config!.apiSecret)}`;
+      const response = await this.axiosInstance!.post(url, body, {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'text/html,application/xhtml+xml',
+        },
+        maxRedirects: 0,
+        validateStatus: () => true, // 200, 302 (redirect with Set-Cookie) are valid
+      });
+      const setCookieHeaders = response.headers['set-cookie'] || [];
+      const cookies = Array.isArray(setCookieHeaders) ? setCookieHeaders : [setCookieHeaders].filter(Boolean);
+      const jsessionId = this.extractJSessionId(cookies);
+      if (jsessionId) {
+        this.session = {
+          sessionId: jsessionId,
+          cookies,
+          expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+        };
+        this.msLogger.info(`[${requestId}] Login successful (j_security_check)`, {
+          requestId,
+          duration: Date.now() - startTime,
+          sessionIdMasked: this.maskSessionId(jsessionId),
+        });
+        return this.session;
+      }
+    } catch (e) {
+      this.msLogger.debug(`[${requestId}] j_security_check failed`, { error: (e as Error).message });
+    }
+    return null;
   }
   /**
    * Logout (signOut) - POST на /ora/authenticationService/authentication/signOut з JSESSIONID у заголовку
