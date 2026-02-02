@@ -14,8 +14,16 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Завантажити .env якщо є (для OPENSEARCH_* при очищенні індексу)
-if [[ -f .env ]]; then set -a; source .env; set +a; fi
+# Завантажити лише рядки виду KEY=value з .env (без source .env, щоб не виконувати рядки типу "QMS")
+if [[ -f .env ]]; then
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ "$line" =~ ^[[:space:]]*$ ]] && continue
+    if [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then
+      export "$line"
+    fi
+  done < .env
+fi
 
 COMPOSE_FILE="infra/docker-compose.yml"
 if [[ ! -f "$COMPOSE_FILE" ]]; then
