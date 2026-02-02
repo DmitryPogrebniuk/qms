@@ -263,6 +263,7 @@ export class RecordingsController {
         message: 'Export is being processed. Check status with GET /recordings/exports/:jobId',
       });
     } else {
+      this.logger.warn(`Download failed for recording ${id}: ${downloadResult.error || 'Export failed'}`);
       throw new BadRequestException(downloadResult.error || 'Export failed');
     }
   }

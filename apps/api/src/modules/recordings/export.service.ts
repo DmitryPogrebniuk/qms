@@ -119,12 +119,25 @@ export class ExportService implements OnModuleInit {
     }
 
     // Get recording info (hasAudio or audioUrl = can stream/download)
-    const recording = await this.prisma.recording.findUnique({
+    let recording = await this.prisma.recording.findUnique({
       where: { id: recordingId },
-      select: { durationSeconds: true, audioFormat: true, hasAudio: true, audioUrl: true },
+      select: { durationSeconds: true, audioFormat: true, hasAudio: true, audioUrl: true, mediasenseSessionId: true },
     });
 
-    const canStream = recording && (recording.hasAudio || Boolean(recording.audioUrl));
+    let canStream = recording && (recording.hasAudio || Boolean(recording.audioUrl));
+    // Якщо немає audioUrl але є mediasenseSessionId — спробувати отримати URL з MediaSense (он-деманд)
+    if (!canStream && recording?.mediasenseSessionId) {
+      const availability = await this.streamService.checkAudioAvailability(recordingId);
+      if (availability.available) {
+        recording = await this.prisma.recording.findUnique({
+          where: { id: recordingId },
+          select: { durationSeconds: true, audioFormat: true, hasAudio: true, audioUrl: true },
+        });
+        canStream = Boolean(recording?.hasAudio || recording?.audioUrl);
+      } else {
+        return { status: 'error', error: availability.error || 'Recording has no audio' };
+      }
+    }
     if (!canStream) {
       return { status: 'error', error: 'Recording has no audio' };
     }
