@@ -110,9 +110,10 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger('MediaSenseSyncService');
   private readonly SYNC_TYPE = 'mediasense_recordings';
   private readonly OVERLAP_WINDOW_MINUTES = 30; // Re-fetch last 30 min for maturing records
-  private readonly DEFAULT_PAGE_SIZE = 100;
-  private readonly MAX_PAGES_PER_SYNC = 50; // Limit pages per sync cycle
-  private readonly DEFAULT_RETENTION_DAYS = 180; // 6 months
+  private readonly DEFAULT_PAGE_SIZE = 500; // Fallback if env not set; use MEDIASENSE_SYNC_PAGE_SIZE to override
+  private readonly DEFAULT_MAX_PAGES_PER_SYNC = 2000; // So one run can fetch up to ~1M sessions (500×2000)
+  private readonly DEFAULT_RETENTION_DAYS = 365; // 1 year; use MEDIASENSE_RETENTION_DAYS to override
+  private readonly DEFAULT_BACKFILL_DAYS_PER_RUN = 30; // Process 30 days per backfill run
   
   private isSyncing = false;
   private syncEnabled = true;
@@ -223,8 +224,11 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
       let lastProcessedTime = checkpoint.lastSyncTime;
       let lastProcessedId = checkpoint.lastSeenId;
 
-      while (hasMore && page <= this.MAX_PAGES_PER_SYNC) {
-        const sessions = await this.fetchSessions(fromTime, now, page, this.DEFAULT_PAGE_SIZE, correlationId);
+      const pageSize = this.configService.get<number>('MEDIASENSE_SYNC_PAGE_SIZE') ?? this.DEFAULT_PAGE_SIZE;
+      const maxPagesPerSync = this.configService.get<number>('MEDIASENSE_SYNC_MAX_PAGES') ?? this.DEFAULT_MAX_PAGES_PER_SYNC;
+
+      while (hasMore && page <= maxPagesPerSync) {
+        const sessions = await this.fetchSessions(fromTime, now, page, pageSize, correlationId);
         
         if (!sessions || sessions.length === 0) {
           hasMore = false;
@@ -255,7 +259,7 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
         }
 
         page++;
-        hasMore = sessions.length === this.DEFAULT_PAGE_SIZE;
+        hasMore = sessions.length === pageSize;
 
         // Rate limiting - small delay between pages
         await this.delay(100);
@@ -356,7 +360,8 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
       await this.configureClient();
 
       // Determine backfill date range
-      const retentionDays = this.configService.get<number>('MEDIASENSE_RETENTION_DAYS') || this.DEFAULT_RETENTION_DAYS;
+      const retentionDays = this.configService.get<number>('MEDIASENSE_RETENTION_DAYS') ?? this.DEFAULT_RETENTION_DAYS;
+      const backfillDaysPerRun = this.configService.get<number>('MEDIASENSE_BACKFILL_DAYS_PER_RUN') ?? this.DEFAULT_BACKFILL_DAYS_PER_RUN;
       const endDate = new Date();
       const startDate = new Date(endDate.getTime() - retentionDays * 24 * 60 * 60 * 1000);
 
@@ -367,7 +372,9 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
 
       const batchDays = 1; // Process one day at a time
       let processedBatches = 0;
-      const maxBatchesPerRun = 7; // Limit to ~1 week per sync cycle
+      const maxBatchesPerRun = backfillDaysPerRun; // Process up to N days per run (e.g. 30)
+
+      const pageSize = this.configService.get<number>('MEDIASENSE_SYNC_PAGE_SIZE') ?? this.DEFAULT_PAGE_SIZE;
 
       while (currentDate < endDate && processedBatches < maxBatchesPerRun) {
         const batchEnd = new Date(Math.min(
@@ -382,7 +389,7 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
         let hasMore = true;
 
         while (hasMore) {
-          const sessions = await this.fetchSessions(currentDate, batchEnd, page, this.DEFAULT_PAGE_SIZE, correlationId);
+          const sessions = await this.fetchSessions(currentDate, batchEnd, page, pageSize, correlationId);
           
           if (!sessions || sessions.length === 0) {
             hasMore = false;
@@ -403,7 +410,7 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
           }
 
           page++;
-          hasMore = sessions.length === this.DEFAULT_PAGE_SIZE;
+          hasMore = sessions.length === pageSize;
           await this.delay(100);
         }
 

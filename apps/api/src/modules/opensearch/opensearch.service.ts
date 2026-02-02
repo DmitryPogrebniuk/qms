@@ -67,6 +67,7 @@ export class OpenSearchService implements OnModuleInit {
             number_of_shards: 1,
             number_of_replicas: 0,
             'index.mapping.total_fields.limit': 2000,
+            'index.max_result_window': 100000,
           },
           mappings: {
             properties: {
@@ -104,9 +105,32 @@ export class OpenSearchService implements OnModuleInit {
       );
 
       this.logger.log('OpenSearch index template created/updated');
+
+      // Apply max_result_window to existing indices (template only affects new indices)
+      await this.ensureMaxResultWindow();
     } catch (error: any) {
       if (error.response?.status !== 400) {
         this.logger.error('Failed to create index template:', error.message);
+      }
+    }
+  }
+
+  /**
+   * Set max_result_window on existing recording indices so pagination beyond 10k works
+   */
+  private async ensureMaxResultWindow(): Promise<void> {
+    try {
+      const indexPattern = `${this.indexPrefix}-recordings-*`;
+      await this.httpService.axiosRef.put(
+        `${this._getBaseUrl()}/${indexPattern}/_settings`,
+        { index: { max_result_window: 100000 } },
+        { headers: this._getHeaders() },
+      );
+      this.logger.log('OpenSearch max_result_window updated for existing indices');
+    } catch (error: any) {
+      // Ignore if no indices exist yet (404) or other non-fatal errors
+      if (error.response?.status !== 404 && error.response?.status !== 400) {
+        this.logger.warn('Could not update max_result_window on existing indices:', error.message);
       }
     }
   }
@@ -173,6 +197,7 @@ export class OpenSearchService implements OnModuleInit {
         query: query.query,
         size: query.size || 20,
         from: query.from || 0,
+        track_total_hits: true,
       };
 
       if (query.sort) {

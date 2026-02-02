@@ -37,6 +37,10 @@ export const configValidationSchema = Joi.object({
   MEDIASENSE_USERNAME: Joi.string().required(),
   MEDIASENSE_PASSWORD: Joi.string().required(),
   MEDIASENSE_BATCH_SIZE: Joi.number().default(100),
+  MEDIASENSE_RETENTION_DAYS: Joi.number().default(365).description('How many days of history to backfill (e.g. 365 for 1 year, 730 for 2 years)'),
+  MEDIASENSE_SYNC_PAGE_SIZE: Joi.number().default(500).description('Sessions per page when fetching from MediaSense (increase for faster sync)'),
+  MEDIASENSE_SYNC_MAX_PAGES: Joi.number().default(2000).description('Max pages per incremental sync run (pageSize × maxPages = max sessions per run)'),
+  MEDIASENSE_BACKFILL_DAYS_PER_RUN: Joi.number().default(30).description('Days of history to process per backfill run (trigger Sync multiple times until backfill complete)'),
 
   // OpenSearch
   OPENSEARCH_HOST: Joi.string().required(),
