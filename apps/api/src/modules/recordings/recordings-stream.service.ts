@@ -57,6 +57,16 @@ export class RecordingsStreamService {
       return { available: false, error: 'Recording not found' };
     }
 
+    // If we have stored audio URL from sync (MediaSense wavUrl), treat as available for playback/download
+    if (recording.audioUrl) {
+      return {
+        available: true,
+        format: recording.audioFormat || 'wav',
+        duration: recording.durationSeconds,
+        size: recording.audioSizeBytes ? Number(recording.audioSizeBytes) : undefined,
+      };
+    }
+
     // If we already know there's no audio
     if (!recording.hasAudio && recording.mediaCheckedAt) {
       return { available: false, error: 'No audio available' };

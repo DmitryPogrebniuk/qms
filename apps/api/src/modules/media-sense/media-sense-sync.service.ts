@@ -647,7 +647,8 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
         const durationMs = raw.sessionDuration || raw.tracks?.[0]?.trackDuration || raw.duration;
         const durationSeconds = durationMs ? durationMs / 1000 : undefined;
         
-        // ANI/DNIS: MediaSense 11.5 often has no top-level ani/dnis; get from tracks[0].participants (deviceRef = phone number)
+        // ANI/DNIS: MediaSense 11.5 often has no top-level ani/dnis. ANI = хто дзвонив (caller), DNIS = куди дзвонив (called).
+        // Учасники: перший = caller (ANI), другий = called (DNIS). Не дублювати — при одному учаснику лише ANI.
         const participants = raw.tracks?.[0]?.participants || raw.participants || [];
         let ani = raw.ani || raw.callerNumber || raw.fromNumber;
         let dnis = raw.dnis || raw.calledNumber || raw.toNumber;
@@ -658,9 +659,13 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
         if (!dnis && participants.length >= 2) {
           const p1 = participants[1];
           dnis = p1.deviceRef || p1.phoneNumber || p1.number || p1.dn;
-        } else if (!dnis && participants.length === 1) {
-          const p0 = participants[0];
-          dnis = p0.deviceRef || p0.phoneNumber || p0.number || p0.dn;
+        }
+        // При одному учаснику DNIS не ставимо = ANI (це різні поля)
+
+        // Напрямок: якщо немає з API — визначаємо за довжиною номера. Короткий→довгий = Вихідний, довгий→короткий = Вхідний.
+        let direction = this.normalizeDirection(raw.direction || raw.callDirection);
+        if (direction === 'unknown' && ani && dnis && ani !== dnis) {
+          direction = this.inferDirectionFromAniDnis(ani, dnis);
         }
 
         // MediaSense field mapping (based on real API response)
@@ -670,7 +675,7 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
           startTime: startTime,
           endTime: endTime,
           duration: durationSeconds,
-          direction: this.normalizeDirection(raw.direction || raw.callDirection),
+          direction,
           ani,
           dnis,
           callerName: raw.callerName || raw.fromName,
@@ -722,6 +727,22 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
     if (d.includes('in') || d.includes('incom')) return 'inbound';
     if (d.includes('out')) return 'outbound';
     if (d.includes('internal')) return 'internal';
+    return 'unknown';
+  }
+
+  /**
+   * Визначити напрямок за довжиною номера: короткий (внутрішній) → довгий (зовнішній) = Вихідний (outbound),
+   * довгий → короткий = Вхідний (inbound). Поріг "короткий" = до 6 цифр (внутрішній номер/розширення).
+   */
+  private inferDirectionFromAniDnis(ani: string, dnis: string): string {
+    const digitsOnly = (s: string) => String(s || '').replace(/\D/g, '');
+    const lenAni = digitsOnly(ani).length;
+    const lenDnis = digitsOnly(dnis).length;
+    const shortThreshold = 6;
+    const aniShort = lenAni <= shortThreshold;
+    const dnisShort = lenDnis <= shortThreshold;
+    if (aniShort && !dnisShort) return 'outbound';   // короткий → довгий = вихідний
+    if (!aniShort && dnisShort) return 'inbound';   // довгий → короткий = вхідний
     return 'unknown';
   }
 
