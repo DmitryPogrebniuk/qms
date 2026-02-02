@@ -650,9 +650,14 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
           }
         }
         
-        // Calculate duration in seconds (prefer sessionDuration, then trackDuration)
-        const durationMs = raw.sessionDuration || raw.tracks?.[0]?.trackDuration || raw.duration;
-        const durationSeconds = durationMs ? durationMs / 1000 : undefined;
+        // Calculate duration in seconds (prefer sessionDuration, then trackDuration; fallback from start/end)
+        let durationMs = raw.sessionDuration || raw.tracks?.[0]?.trackDuration || raw.duration;
+        let durationSeconds = durationMs ? durationMs / 1000 : undefined;
+        if ((durationSeconds == null || durationSeconds <= 0) && endTime && startTime) {
+          const startMs = new Date(startTime).getTime();
+          const endMs = new Date(endTime).getTime();
+          if (endMs > startMs) durationSeconds = (endMs - startMs) / 1000;
+        }
         
         // ANI/DNIS: MediaSense 11.5 — ANI = caller (хто дзвонив), DNIS = called (куди дзвонив).
         // Можливі два треки: tracks[0] = зовнішній абонент, tracks[1] = агент/черга. Беремо з обох треків.
@@ -866,7 +871,11 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
       teamName: session.teamName,
       startTime: new Date(session.startTime),
       endTime: session.endTime ? new Date(session.endTime) : null,
-      durationSeconds: session.duration || 0,
+      durationSeconds: Math.round(
+        session.duration ?? (session.startTime && session.endTime
+          ? (new Date(session.endTime).getTime() - new Date(session.startTime).getTime()) / 1000
+          : 0),
+      ),
       contactId: session.contactId,
       callId: session.callId,
       direction: session.direction || 'unknown',
