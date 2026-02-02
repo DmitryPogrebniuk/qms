@@ -911,28 +911,7 @@ export class MediaSenseClientService {
         });
       }
 
-      // Try 2: Alternative serviceInfo endpoint (if first failed)
-      if (!apiResponse?.success) {
-        try {
-          apiResponse = await this.request('GET', this.endpoints.serviceInfoAlt);
-          if (apiResponse.success) {
-            details.push({
-              step: 'API Access',
-              status: 'ok',
-              message: 'API responding correctly via alternative endpoint',
-              duration: Date.now() - apiStart,
-            });
-          } else {
-            lastError = apiResponse.error || lastError || 'Unknown error';
-          }
-        } catch (error) {
-          // Ignore 404 for alternative endpoint - it might not exist in all versions
-          const axiosError = error as AxiosError;
-          if (axiosError.response?.status !== 404) {
-            lastError = (error as Error).message;
-          }
-        }
-      }
+      // Try 2: Alternative serviceInfo endpoint skipped for MediaSense 11.5 - /ora/queryService/query/serviceInfo returns 404 and causes ERROR logs.
 
       // Try 3: Query endpoint (only if we have JSESSIONID or want to test)
       // MediaSense 11.5 uses JSESSIONID (not JSESSIONIDSSO) from reverse engineering

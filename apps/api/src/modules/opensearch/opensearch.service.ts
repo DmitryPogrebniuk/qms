@@ -189,8 +189,15 @@ export class OpenSearchService implements OnModuleInit {
         { headers: this._getHeaders() },
       );
 
+      // OpenSearch 2.x returns total as { value: N }; older versions as number. Avoid passing object (causes [object Object] in UI).
+      const rawTotal = response.data.hits.total;
+      const total =
+        typeof rawTotal === 'object' && rawTotal != null && 'value' in rawTotal
+          ? Number(rawTotal.value) || 0
+          : Number(rawTotal) || 0;
+
       return {
-        total: response.data.hits.total?.value || response.data.hits.total || 0,
+        total,
         hits: response.data.hits.hits || [],
         aggregations: response.data.aggregations,
       };
@@ -239,8 +246,14 @@ export class OpenSearchService implements OnModuleInit {
         { headers },
       );
 
+      const rawTotal = response.data.hits.total;
+      const total =
+        typeof rawTotal === 'object' && rawTotal != null && 'value' in rawTotal
+          ? Number(rawTotal.value) || 0
+          : Number(rawTotal) || 0;
+
       return {
-        total: response.data.hits.total?.value || response.data.hits.total,
+        total,
         hits: response.data.hits.hits.map((hit: any) => hit._source),
       };
     } catch (error: any) {

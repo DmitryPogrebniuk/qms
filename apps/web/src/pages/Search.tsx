@@ -241,7 +241,9 @@ export default function Search() {
             {searchResult && (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 2 }}>
                 <Chip
-                  label={t('recordings.totalResults', '{{count}} recordings', { count: searchResult.total })}
+                  label={t('recordings.totalResults', '{{count}} recordings', {
+                    count: typeof searchResult.total === 'number' ? searchResult.total : 0,
+                  })}
                   size="small"
                   color="primary"
                   variant="outlined"
@@ -307,7 +309,7 @@ export default function Search() {
         <Box sx={{ flex: 1, overflow: 'hidden' }}>
           <RecordingsResultsTable
             recordings={searchResult?.items || []}
-            total={searchResult?.total || 0}
+            total={typeof searchResult?.total === 'number' ? searchResult.total : 0}
             page={filters.page || 1}
             pageSize={filters.pageSize || 20}
             sortBy={filters.sortBy || 'startTime'}
