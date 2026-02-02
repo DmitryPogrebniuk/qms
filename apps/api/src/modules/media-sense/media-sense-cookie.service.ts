@@ -143,10 +143,10 @@ export class MediaSenseCookieService implements OnModuleDestroy {
         timeout: 30000,
       });
 
-      // Wait for login form to appear
+      // Wait for login form to appear (longer timeout for slow MediaSense / network)
       // MediaSense typically uses j_username and j_password fields
       await page.waitForSelector('input[name="j_username"], input[name="username"], input[type="text"]', {
-        timeout: 10000,
+        timeout: 20000,
       });
 
       // Fill in credentials

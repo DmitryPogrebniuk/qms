@@ -184,8 +184,11 @@ export class RecordingsController {
       streamResult = await this.streamService.streamAudio(id, range);
     } catch (err: any) {
       const msg = err?.message ?? '';
-      if (msg.includes('not configured') || msg.includes('MediaSense not configured')) {
-        throw new ServiceUnavailableException(msg || 'MediaSense not configured');
+      const isMediasenseUnavailable =
+        msg.includes('not configured') || msg.includes('MediaSense not configured') ||
+        msg.includes('Login failed') || msg.includes('web automation failed') || msg.includes('signin endpoint');
+      if (isMediasenseUnavailable) {
+        throw new ServiceUnavailableException(msg || 'MediaSense unavailable');
       }
       throw err;
     }
@@ -274,7 +277,10 @@ export class RecordingsController {
     } else {
       this.logger.warn(`Download failed for recording ${id}: ${downloadResult.error || 'Export failed'}`);
       const errMsg = downloadResult.error || 'Export failed';
-      if (errMsg.includes('not configured') || errMsg.includes('MediaSense not configured')) {
+      const isMediasenseUnavailable =
+        errMsg.includes('not configured') || errMsg.includes('MediaSense not configured') ||
+        errMsg.includes('Login failed') || errMsg.includes('web automation failed') || errMsg.includes('signin endpoint');
+      if (isMediasenseUnavailable) {
         throw new ServiceUnavailableException(errMsg);
       }
       throw new BadRequestException(errMsg);
