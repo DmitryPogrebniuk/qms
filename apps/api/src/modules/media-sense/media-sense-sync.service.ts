@@ -647,6 +647,22 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
         const durationMs = raw.sessionDuration || raw.tracks?.[0]?.trackDuration || raw.duration;
         const durationSeconds = durationMs ? durationMs / 1000 : undefined;
         
+        // ANI/DNIS: MediaSense 11.5 often has no top-level ani/dnis; get from tracks[0].participants (deviceRef = phone number)
+        const participants = raw.tracks?.[0]?.participants || raw.participants || [];
+        let ani = raw.ani || raw.callerNumber || raw.fromNumber;
+        let dnis = raw.dnis || raw.calledNumber || raw.toNumber;
+        if (!ani && participants.length >= 1) {
+          const p0 = participants[0];
+          ani = p0.deviceRef || p0.phoneNumber || p0.number || p0.dn;
+        }
+        if (!dnis && participants.length >= 2) {
+          const p1 = participants[1];
+          dnis = p1.deviceRef || p1.phoneNumber || p1.number || p1.dn;
+        } else if (!dnis && participants.length === 1) {
+          const p0 = participants[0];
+          dnis = p0.deviceRef || p0.phoneNumber || p0.number || p0.dn;
+        }
+
         // MediaSense field mapping (based on real API response)
         return {
           sessionId: raw.sessionId || raw.id || raw.recordingId,
@@ -655,8 +671,8 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
           endTime: endTime,
           duration: durationSeconds,
           direction: this.normalizeDirection(raw.direction || raw.callDirection),
-          ani: raw.ani || raw.callerNumber || raw.fromNumber,
-          dnis: raw.dnis || raw.calledNumber || raw.toNumber,
+          ani,
+          dnis,
           callerName: raw.callerName || raw.fromName,
           calledName: raw.calledName || raw.toName,
           agentId: raw.agentId || raw.agent?.id || raw.ownerId || 
@@ -806,7 +822,7 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
       talkTimeSeconds: session.talkTime || 0,
       ringTimeSeconds: session.ringTime || 0,
       queueTimeSeconds: session.queueTime || 0,
-      hasAudio: session.media?.hasAudio || false,
+      hasAudio: session.media?.hasAudio || Boolean(session.media?.url),
       audioCodec: session.media?.codec,
       audioSampleRate: session.media?.sampleRate,
       audioBitrate: session.media?.bitrate,

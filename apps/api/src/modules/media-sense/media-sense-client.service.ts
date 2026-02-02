@@ -1348,6 +1348,50 @@ export class MediaSenseClientService {
   }
 
   /**
+   * Stream media from an absolute URL (e.g. urls.wavUrl from getSessions).
+   * Use when recording.audioUrl is set from sync; avoids API endpoint 404.
+   */
+  async streamFromUrl(
+    fullUrl: string,
+    rangeHeader?: string,
+  ): Promise<{ stream: any; headers: Record<string, string>; statusCode: number }> {
+    if (!this.axiosInstance || !this.config) {
+      throw new Error('Client not configured');
+    }
+    await this.ensureAuthenticated();
+
+    const headers: Record<string, string> = {
+      ...this.getSessionHeaders(),
+    };
+    if (rangeHeader) {
+      headers['Range'] = rangeHeader;
+    }
+
+    const response = await this.axiosInstance.request({
+      method: 'GET',
+      url: fullUrl,
+      responseType: 'stream',
+      headers,
+      validateStatus: () => true,
+    });
+
+    if (response.status >= 400) {
+      throw new Error(`Media URL returned ${response.status}`);
+    }
+
+    const outHeaders: Record<string, string> = {};
+    if (response.headers['content-type']) outHeaders['Content-Type'] = response.headers['content-type'];
+    if (response.headers['content-length']) outHeaders['Content-Length'] = response.headers['content-length'];
+    if (response.headers['content-range']) outHeaders['Content-Range'] = response.headers['content-range'];
+
+    return {
+      stream: response.data,
+      headers: outHeaders,
+      statusCode: response.status,
+    };
+  }
+
+  /**
    * Ensure we have a valid session
    */
   private async ensureAuthenticated(): Promise<void> {

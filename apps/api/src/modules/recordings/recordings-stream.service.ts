@@ -113,7 +113,8 @@ export class RecordingsStreamService {
   }
 
   /**
-   * Stream audio with Range support for seeking
+   * Stream audio with Range support for seeking.
+   * Prefer recording.audioUrl (wavUrl from MediaSense getSessions) when set; else use API streamMedia.
    */
   async streamAudio(recordingId: string, rangeHeader?: string): Promise<StreamResult> {
     const recording = await this.prisma.recording.findUnique({
@@ -131,28 +132,45 @@ export class RecordingsStreamService {
       throw new NotFoundException('Recording not found');
     }
 
-    if (!recording.hasAudio) {
+    const canStream = recording.hasAudio || Boolean(recording.audioUrl);
+    if (!canStream) {
       throw new NotFoundException('No audio available for this recording');
     }
 
     await this.ensureClientConfigured();
 
+    const contentType = this.getContentType(recording.audioFormat || 'wav');
+
     try {
-      // Stream from MediaSense with Range support
+      // Prefer direct URL from sync (MediaSense 11.5 urls.wavUrl) when available
+      if (recording.audioUrl) {
+        const streamResult = await this.mediaSenseClient.streamFromUrl(
+          recording.audioUrl,
+          rangeHeader,
+        );
+        return {
+          stream: streamResult.stream,
+          contentType: streamResult.headers['Content-Type'] || contentType,
+          contentLength: streamResult.headers['Content-Length']
+            ? parseInt(streamResult.headers['Content-Length'], 10)
+            : undefined,
+          contentRange: streamResult.headers['Content-Range'],
+          statusCode: streamResult.statusCode,
+        };
+      }
+
+      // Fallback: stream via API endpoint
       const streamResult = await this.mediaSenseClient.streamMedia(
         recording.mediasenseSessionId,
-        0, // track index
+        0,
         rangeHeader,
       );
-
-      // Determine content type
-      const contentType = this.getContentType(recording.audioFormat || 'wav');
 
       return {
         stream: streamResult.stream,
         contentType: streamResult.headers['Content-Type'] || contentType,
         contentLength: streamResult.headers['Content-Length']
-          ? parseInt(streamResult.headers['Content-Length'])
+          ? parseInt(streamResult.headers['Content-Length'], 10)
           : undefined,
         contentRange: streamResult.headers['Content-Range'],
         statusCode: streamResult.statusCode,
@@ -164,7 +182,8 @@ export class RecordingsStreamService {
   }
 
   /**
-   * Get raw audio stream (for transcoding)
+   * Get raw audio stream (for transcoding to MP3 etc).
+   * Prefer recording.audioUrl when set.
    */
   async getRawAudioStream(recordingId: string): Promise<{
     stream: Readable;
@@ -175,6 +194,7 @@ export class RecordingsStreamService {
       where: { id: recordingId },
       select: {
         mediasenseSessionId: true,
+        audioUrl: true,
         audioFormat: true,
         audioSizeBytes: true,
       },
@@ -185,6 +205,15 @@ export class RecordingsStreamService {
     }
 
     await this.ensureClientConfigured();
+
+    if (recording.audioUrl) {
+      const streamResult = await this.mediaSenseClient.streamFromUrl(recording.audioUrl);
+      return {
+        stream: streamResult.stream,
+        format: recording.audioFormat || 'wav',
+        size: recording.audioSizeBytes ? Number(recording.audioSizeBytes) : undefined,
+      };
+    }
 
     const streamResult = await this.mediaSenseClient.streamMedia(
       recording.mediasenseSessionId,
