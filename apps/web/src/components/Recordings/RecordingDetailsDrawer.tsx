@@ -107,6 +107,9 @@ export const RecordingDetailsDrawer: React.FC<RecordingDetailsDrawerProps> = ({
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const token = typeof localStorage !== 'undefined' ? localStorage.getItem('jwt_token') : null;
+  const streamUrl = recording && token && token !== 'null' ? getStreamUrl(recording.id) : undefined;
+
   // Reset state when recording changes
   useEffect(() => {
     setIsPlaying(false);
@@ -287,10 +290,10 @@ export const RecordingDetailsDrawer: React.FC<RecordingDetailsDrawerProps> = ({
         </IconButton>
       </Box>
 
-      {/* Audio Player — show when hasAudio or mediasenseSessionId (backend will try stream) */}
+      {/* Audio Player — show when hasAudio or mediasenseSessionId (backend will try stream). Set src only when we have a valid token to avoid 401. */}
       {(recording.hasAudio || recording.mediasenseSessionId) && (
         <Paper sx={{ m: 2, p: 2, bgcolor: 'grey.100' }} elevation={0}>
-          <audio ref={audioRef} src={getStreamUrl(recording.id)} preload="metadata" />
+          <audio ref={audioRef} src={streamUrl} preload="metadata" />
 
           {error && (
             <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>

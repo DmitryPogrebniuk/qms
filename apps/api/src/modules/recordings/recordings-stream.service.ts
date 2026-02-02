@@ -270,17 +270,24 @@ export class RecordingsStreamService {
   }
 
   private async ensureClientConfigured(): Promise<void> {
-    const apiUrl = this.configService.get<string>('MEDIASENSE_API_URL');
-    const apiKey = this.configService.get<string>('MEDIASENSE_API_KEY');
-    const apiSecret = this.configService.get<string>('MEDIASENSE_API_SECRET');
+    let baseUrl = this.configService.get<string>('MEDIASENSE_API_URL');
+    let apiKey = this.configService.get<string>('MEDIASENSE_API_KEY');
+    let apiSecret = this.configService.get<string>('MEDIASENSE_API_SECRET');
+    if (!baseUrl && this.configService.get<string>('MEDIASENSE_HOST')) {
+      const host = this.configService.get<string>('MEDIASENSE_HOST');
+      const port = this.configService.get<number>('MEDIASENSE_PORT') || 8440;
+      baseUrl = `https://${host}:${port}`;
+    }
+    if (!apiKey) apiKey = this.configService.get<string>('MEDIASENSE_USERNAME') ?? undefined;
+    if (!apiSecret) apiSecret = this.configService.get<string>('MEDIASENSE_PASSWORD') ?? undefined;
     const allowSelfSigned = this.configService.get<boolean>('MEDIASENSE_ALLOW_SELF_SIGNED');
 
-    if (!apiUrl || !apiKey || !apiSecret) {
-      throw new Error('MediaSense not configured');
+    if (!baseUrl || !apiKey || !apiSecret) {
+      throw new Error('MediaSense not configured (set MEDIASENSE_HOST/MEDIASENSE_USERNAME/MEDIASENSE_PASSWORD or MEDIASENSE_API_URL/API_KEY/API_SECRET)');
     }
 
     this.mediaSenseClient.configure({
-      baseUrl: apiUrl,
+      baseUrl,
       apiKey,
       apiSecret,
       allowSelfSigned,

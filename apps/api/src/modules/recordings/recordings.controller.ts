@@ -15,6 +15,7 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiParam, ApiResponse } from '@nestjs/swagger';
 import { Response as ExpressResponse } from 'express';
@@ -178,8 +179,16 @@ export class RecordingsController {
     // Log audit event
     await this.recordingsService.logPlaybackEvent(id, req.user.sub || req.user.id);
 
-    // Stream audio
-    const streamResult = await this.streamService.streamAudio(id, range);
+    let streamResult;
+    try {
+      streamResult = await this.streamService.streamAudio(id, range);
+    } catch (err: any) {
+      const msg = err?.message ?? '';
+      if (msg.includes('not configured') || msg.includes('MediaSense not configured')) {
+        throw new ServiceUnavailableException(msg || 'MediaSense not configured');
+      }
+      throw err;
+    }
 
     // Set response headers
     res.setHeader('Content-Type', streamResult.contentType);
@@ -264,7 +273,11 @@ export class RecordingsController {
       });
     } else {
       this.logger.warn(`Download failed for recording ${id}: ${downloadResult.error || 'Export failed'}`);
-      throw new BadRequestException(downloadResult.error || 'Export failed');
+      const errMsg = downloadResult.error || 'Export failed';
+      if (errMsg.includes('not configured') || errMsg.includes('MediaSense not configured')) {
+        throw new ServiceUnavailableException(errMsg);
+      }
+      throw new BadRequestException(errMsg);
     }
   }
 
@@ -379,6 +392,27 @@ export class RecordingsController {
     }
 
     downloadResult.stream!.pipe(res);
+  }
+
+  /**
+   * Log playback event (play, pause, seek, complete)
+   */
+  @Post(':id/playback')
+  @ApiOperation({ summary: 'Log playback event' })
+  @ApiParam({ name: 'id', description: 'Recording ID' })
+  async logPlayback(
+    @Param('id') id: string,
+    @Body() body: { event?: string; position?: number },
+    @Request() req: any,
+  ) {
+    const hasAccess = await this.recordingsService.checkAccess(
+      id,
+      req.user.sub || req.user.id,
+      req.user.roles?.[0] || req.user.role || 'USER',
+    );
+    if (!hasAccess) throw new ForbiddenException('Access denied');
+    await this.recordingsService.logPlaybackEvent(id, req.user.sub || req.user.id);
+    return { ok: true };
   }
 
   /**

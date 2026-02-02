@@ -252,8 +252,9 @@ export async function getFilterOptions(field: string): Promise<FilterOption[]> {
  * Get audio stream URL for a recording
  */
 export function getStreamUrl(recordingId: string): string {
-  const token = localStorage.getItem('token');
-  return `/api/recordings/${recordingId}/stream?token=${token}`;
+  const token = localStorage.getItem('jwt_token');
+  const t = token && token !== 'null' ? token : '';
+  return `/api/recordings/${recordingId}/stream?token=${t}`;
 }
 
 /**
