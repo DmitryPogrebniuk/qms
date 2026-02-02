@@ -131,7 +131,7 @@ export class ExportService implements OnModuleInit {
       if (availability.available) {
         recording = await this.prisma.recording.findUnique({
           where: { id: recordingId },
-          select: { durationSeconds: true, audioFormat: true, hasAudio: true, audioUrl: true },
+          select: { durationSeconds: true, audioFormat: true, hasAudio: true, audioUrl: true, mediasenseSessionId: true },
         });
         canStream = Boolean(recording?.hasAudio || recording?.audioUrl);
       } else {
