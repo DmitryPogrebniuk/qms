@@ -753,7 +753,8 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Визначити напрямок за довжиною номера: короткий (внутрішній) → довгий (зовнішній) = Вихідний (outbound),
-   * довгий → короткий = Вхідний (inbound). Поріг "короткий" = до 6 цифр (внутрішній номер/розширення).
+   * довгий → короткий = Вхідний (inbound), обидва короткі = Внутрішній (internal).
+   * Поріг "короткий" = до 6 цифр (внутрішній номер/розширення).
    */
   private inferDirectionFromAniDnis(ani: string, dnis: string): string {
     const digitsOnly = (s: string) => String(s || '').replace(/\D/g, '');
@@ -762,22 +763,26 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
     const shortThreshold = 6;
     const aniShort = lenAni <= shortThreshold;
     const dnisShort = lenDnis <= shortThreshold;
+    if (aniShort && dnisShort) return 'internal';   // обидва короткі = внутрішній дзвінок
     if (aniShort && !dnisShort) return 'outbound';   // короткий → довгий = вихідний
     if (!aniShort && dnisShort) return 'inbound';   // довгий → короткий = вхідний
     return 'unknown';
   }
 
   /**
-   * При одному учаснику: якщо deviceId містить trunk/Trunk — типовий вхідний дзвінок на агента.
+   * При одному учаснику: trunk/gateway/pstn → inbound; короткий номер (розширення) → internal.
    */
   private inferDirectionFromSingleParticipant(raw: any): string {
     const participants = raw.tracks?.[0]?.participants || raw.participants || [];
     if (participants.length < 1) return 'unknown';
     const p0 = participants[0];
     const deviceId = String(p0.deviceId || p0.deviceRef || '').toLowerCase();
+    const deviceRef = String(p0.deviceRef || p0.phoneNumber || '').replace(/\D/g, '');
     if (deviceId.includes('trunk') || deviceId.includes('gateway') || deviceId.includes('pstn')) {
       return 'inbound';
     }
+    // Короткий номер (до 6 цифр) без trunk — внутрішній
+    if (deviceRef.length > 0 && deviceRef.length <= 6) return 'internal';
     return 'unknown';
   }
 

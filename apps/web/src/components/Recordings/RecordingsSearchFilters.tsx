@@ -30,6 +30,7 @@ import {
   Timer as TimerIcon,
   CallReceived as InboundIcon,
   CallMade as OutboundIcon,
+  SwapHoriz as InternalIcon,
   Person as PersonIcon,
   Group as GroupIcon,
   Queue as QueueIcon,
@@ -299,6 +300,13 @@ export const RecordingsSearchFilters: React.FC<RecordingsSearchFiltersProps> = (
               startIcon={<OutboundIcon />}
             >
               {t('recordings.outbound', 'Out')}
+            </Button>
+            <Button
+              variant={filters.direction === 'internal' ? 'contained' : 'outlined'}
+              onClick={() => handleDirectionChange('internal')}
+              startIcon={<InternalIcon />}
+            >
+              {t('recordings.internal', 'Internal')}
             </Button>
           </ButtonGroup>
         </AccordionDetails>

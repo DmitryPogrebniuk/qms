@@ -174,7 +174,7 @@ export const RecordingsResultsTable: React.FC<RecordingsResultsTableProps> = ({
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
             {getDirectionIcon(recording.direction)}
             <Typography variant="body2">
-              {t(`recordings.direction.${recording.direction}`, getDirectionLabel(recording.direction))}
+              {t(`recordings.direction_${recording.direction || 'unknown'}`, getDirectionLabel(recording.direction))}
             </Typography>
           </Box>
         );

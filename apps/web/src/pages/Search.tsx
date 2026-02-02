@@ -3,7 +3,7 @@
  * Full-featured search interface with filters, results table, and details drawer
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Box,
   Typography,
@@ -62,6 +62,7 @@ export default function Search() {
   const [snackbar, setSnackbar] = useState<{ message: string; severity: 'success' | 'error' } | null>(null);
   const [showFilters, setShowFilters] = useState(true);
   const [moreMenuAnchor, setMoreMenuAnchor] = useState<null | HTMLElement>(null);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Active filters count for badge
   const activeFiltersCount = Object.entries(filters).filter(([key, value]) => {
@@ -93,10 +94,20 @@ export default function Search() {
     performSearch(filters);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Handlers
-  const handleFiltersChange = (newFilters: RecordingSearchParams) => {
+  // Cleanup debounce on unmount
+  useEffect(() => () => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+  }, []);
+
+  // Handlers — при зміні фільтра одразу запускаємо пошук (дебаунс 300ms для поля пошуку)
+  const handleFiltersChange = useCallback((newFilters: RecordingSearchParams) => {
     setFilters(newFilters);
-  };
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      performSearch({ ...newFilters, page: 1 });
+      searchDebounceRef.current = null;
+    }, 300);
+  }, [performSearch]);
 
   const handleSearch = () => {
     const searchFilters = { ...filters, page: 1 };
