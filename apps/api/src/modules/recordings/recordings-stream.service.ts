@@ -6,8 +6,10 @@ import { Readable } from 'stream';
 
 /**
  * Recording Stream Service
- * 
- * Handles audio streaming from MediaSense with HTTP Range support for browser seeking
+ *
+ * Handles audio streaming from MediaSense with HTTP Range support for browser seeking.
+ * Aligns with Cisco MediaSense Developer Guide 9.1(1): playback via HTTP (downloadUrl/wavUrl),
+ * Basic Auth + session for media requests, no caching of redirected URL, timeout=n for slow networks.
  */
 
 export interface StreamResult {

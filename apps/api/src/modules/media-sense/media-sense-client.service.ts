@@ -1414,6 +1414,7 @@ export class MediaSenseClientService {
   /**
    * Stream media from an absolute URL (e.g. urls.wavUrl from getSessions).
    * Use when recording.audioUrl is set from sync; avoids API endpoint 404.
+   * Per Cisco Dev Guide 9.x: use Basic Auth for media HTTP; do not cache redirected URL; add timeout=n (seconds) for slow networks.
    */
   async streamFromUrl(
     fullUrl: string,
@@ -1431,9 +1432,14 @@ export class MediaSenseClientService {
       headers['Range'] = rangeHeader;
     }
 
+    // Dev Guide 9.x: add timeout=n (seconds) so MediaSense keeps socket open longer (default 5s)
+    const urlWithTimeout = fullUrl.includes('timeout=')
+      ? fullUrl
+      : `${fullUrl}${fullUrl.includes('?') ? '&' : '?'}timeout=30`;
+
     const response = await this.axiosInstance.request({
       method: 'GET',
-      url: fullUrl,
+      url: urlWithTimeout,
       responseType: 'stream',
       headers,
       validateStatus: () => true,
