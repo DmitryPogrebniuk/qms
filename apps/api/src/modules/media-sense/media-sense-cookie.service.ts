@@ -134,8 +134,15 @@ export class MediaSenseCookieService implements OnModuleDestroy {
       // Create new page
       page = await this.context!.newPage();
 
-      // Navigate to MediaSense login page
-      const loginUrl = `${baseUrl}/`;
+      // Login URL and selectors — from env (HAR-based) or defaults (j_username/username)
+      const base = baseUrl.replace(/\/$/, '');
+      const loginUrl = this.configService.get<string>('MEDIASENSE_LOGIN_URL') || `${base}/`;
+      const usernameSelector = this.configService.get<string>('MEDIASENSE_USERNAME_SELECTOR') ||
+        'input[name="j_username"], input[name="username"], input[type="text"]';
+      const passwordSelector = this.configService.get<string>('MEDIASENSE_PASSWORD_SELECTOR') ||
+        'input[name="j_password"], input[name="password"], input[type="password"]';
+      const submitSelector = this.configService.get<string>('MEDIASENSE_SUBMIT_SELECTOR');
+
       this.msLogger.debug(`[${requestId}] Navigating to ${this.maskSensitiveUrl(loginUrl)}`);
 
       await page.goto(loginUrl, {
@@ -143,20 +150,11 @@ export class MediaSenseCookieService implements OnModuleDestroy {
         timeout: 30000,
       });
 
-      // Wait for login form to appear (longer timeout for slow MediaSense / network)
-      // MediaSense typically uses j_username and j_password fields
-      await page.waitForSelector('input[name="j_username"], input[name="username"], input[type="text"]', {
-        timeout: 20000,
-      });
+      // Wait for login form (configurable selector from HAR)
+      await page.waitForSelector(usernameSelector, { timeout: 20000 });
 
-      // Fill in credentials
-      // Try different possible field names
-      const usernameField = await page.$('input[name="j_username"]') ||
-                           await page.$('input[name="username"]') ||
-                           await page.$('input[type="text"]');
-      const passwordField = await page.$('input[name="j_password"]') ||
-                           await page.$('input[name="password"]') ||
-                           await page.$('input[type="password"]');
+      const usernameField = await this.querySelectorOne(page, usernameSelector);
+      const passwordField = await this.querySelectorOne(page, passwordSelector);
 
       if (!usernameField || !passwordField) {
         throw new Error('Login form fields not found');
@@ -165,17 +163,17 @@ export class MediaSenseCookieService implements OnModuleDestroy {
       await usernameField.fill(username);
       await passwordField.fill(password);
 
-      // Submit form
-      const submitButton = await page.$('input[type="submit"]') ||
-                          await page.$('button[type="submit"]') ||
-                          await page.$('button:has-text("Login")') ||
-                          await page.$('button:has-text("Sign in")');
-
-      if (submitButton) {
-        await submitButton.click();
+      if (submitSelector) {
+        const submitButton = await page.$(submitSelector);
+        if (submitButton) await submitButton.click();
+        else await passwordField.press('Enter');
       } else {
-        // Try pressing Enter
-        await passwordField.press('Enter');
+        const submitButton = await page.$('input[type="submit"]') ||
+          await page.$('button[type="submit"]') ||
+          await page.$('button:has-text("Login")') ||
+          await page.$('button:has-text("Sign in")');
+        if (submitButton) await submitButton.click();
+        else await passwordField.press('Enter');
       }
 
       // Wait for navigation after login
@@ -328,5 +326,17 @@ export class MediaSenseCookieService implements OnModuleDestroy {
       return '***';
     }
     return `${sessionId.substring(0, 8)}...${sessionId.substring(sessionId.length - 4)}`;
+  }
+
+  /**
+   * Try comma-separated selectors, return first matching element
+   */
+  private async querySelectorOne(page: Page, selectorString: string) {
+    const parts = selectorString.split(',').map((s) => s.trim()).filter(Boolean);
+    for (const sel of parts) {
+      const el = await page.$(sel);
+      if (el) return el;
+    }
+    return null;
   }
 }
