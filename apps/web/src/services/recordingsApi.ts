@@ -319,8 +319,25 @@ export function getStreamUrl(recordingId: string): string {
 export async function downloadRecording(recordingId: string, format: string = 'mp3'): Promise<Blob> {
   const response = await httpClient.get<Blob>(`/recordings/${recordingId}/download?format=${format}`, {
     responseType: 'blob',
+    validateStatus: () => true, // accept all to validate and avoid saving error body as file
   });
-  return response.data;
+  if (response.status === 503) {
+    throw new Error('MEDIASENSE_UNAVAILABLE');
+  }
+  if (response.status < 200 || response.status >= 300) {
+    throw new Error(response.status === 400 ? 'DOWNLOAD_BAD_REQUEST' : `HTTP ${response.status}`);
+  }
+  const blob = response.data;
+  const contentType = response.headers['content-type'] || '';
+  if (blob instanceof Blob) {
+    if (blob.size === 0) {
+      throw new Error('MEDIASENSE_UNAVAILABLE');
+    }
+    if (contentType.includes('application/json')) {
+      throw new Error('MEDIASENSE_UNAVAILABLE');
+    }
+  }
+  return blob;
 }
 
 /**

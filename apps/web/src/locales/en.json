@@ -196,6 +196,7 @@
     "downloading": "Downloading...",
     "downloadComplete": "Download complete",
     "downloadError": "Failed to download",
+    "mediasenseUnavailable": "MediaSense unavailable. Check integration settings (MEDIASENSE_HOST, credentials) and MediaSense server availability.",
     "metadataCopied": "Metadata copied to clipboard",
     "details": "Recording Details",
     "audioError": "Failed to load audio. If you see 503, check MediaSense integration and server availability.",

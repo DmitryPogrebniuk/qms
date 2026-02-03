@@ -134,7 +134,7 @@ export const RecordingDetailsDrawer: React.FC<RecordingDetailsDrawerProps> = ({
       setIsPlaying(false);
       if (recording) logPlayback(recording.id, 'complete');
     };
-    const handleError = () => setError(t('recordings.audioError', 'Failed to load audio'));
+    const handleError = () => setError(t('recordings.mediasenseUnavailable', 'MediaSense unavailable. Check integration and server.'));
 
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('durationchange', handleDurationChange);
@@ -219,8 +219,11 @@ export const RecordingDetailsDrawer: React.FC<RecordingDetailsDrawerProps> = ({
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    } catch (err) {
-      setError(t('recordings.downloadError', 'Failed to download recording'));
+    } catch (err: any) {
+      const msg = err?.message === 'MEDIASENSE_UNAVAILABLE'
+        ? t('recordings.mediasenseUnavailable')
+        : t('recordings.downloadError', 'Failed to download recording');
+      setError(msg);
     } finally {
       setDownloading(false);
     }

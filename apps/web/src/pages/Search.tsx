@@ -176,8 +176,11 @@ export default function Search() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       setSnackbar({ message: t('recordings.downloadComplete', 'Download complete'), severity: 'success' });
-    } catch {
-      setSnackbar({ message: t('recordings.downloadError', 'Failed to download'), severity: 'error' });
+    } catch (err: any) {
+      const msg = err?.message === 'MEDIASENSE_UNAVAILABLE'
+        ? t('recordings.mediasenseUnavailable')
+        : t('recordings.downloadError', 'Failed to download');
+      setSnackbar({ message: msg, severity: 'error' });
     }
   };
 
