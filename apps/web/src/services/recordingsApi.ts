@@ -204,27 +204,83 @@ export interface SyncStatus {
 // ============================================================================
 
 /**
+ * Compute dateFrom/dateTo (ISO) from datePreset (API expects dateFrom/dateTo, not datePreset)
+ */
+function dateRangeFromPreset(preset: RecordingSearchParams['datePreset']): { dateFrom?: string; dateTo?: string } {
+  const now = new Date();
+  const toEndOfDay = (d: Date) => {
+    const x = new Date(d);
+    x.setUTCHours(23, 59, 59, 999);
+    return x.toISOString();
+  };
+  const toStartOfDay = (d: Date) => {
+    const x = new Date(d);
+    x.setUTCHours(0, 0, 0, 0);
+    return x.toISOString();
+  };
+  switch (preset) {
+    case 'today':
+      return { dateFrom: toStartOfDay(now), dateTo: toEndOfDay(now) };
+    case 'yesterday': {
+      const y = new Date(now);
+      y.setUTCDate(y.getUTCDate() - 1);
+      return { dateFrom: toStartOfDay(y), dateTo: toEndOfDay(y) };
+    }
+    case 'last7days': {
+      const from = new Date(now);
+      from.setUTCDate(from.getUTCDate() - 6);
+      return { dateFrom: toStartOfDay(from), dateTo: toEndOfDay(now) };
+    }
+    case 'last30days': {
+      const from = new Date(now);
+      from.setUTCDate(from.getUTCDate() - 29);
+      return { dateFrom: toStartOfDay(from), dateTo: toEndOfDay(now) };
+    }
+    case 'thisMonth': {
+      const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+      return { dateFrom: start.toISOString(), dateTo: toEndOfDay(now) };
+    }
+    case 'lastMonth': {
+      const y = now.getUTCMonth() - 1;
+      const year = y < 0 ? now.getUTCFullYear() - 1 : now.getUTCFullYear();
+      const month = y < 0 ? y + 12 : y;
+      const start = new Date(Date.UTC(year, month, 1));
+      const end = new Date(Date.UTC(year, month + 1, 0, 23, 59, 59, 999));
+      return { dateFrom: start.toISOString(), dateTo: end.toISOString() };
+    }
+    default:
+      return {};
+  }
+}
+
+/**
  * Search recordings with filters and facets
+ * Maps frontend params to API: datePreset→dateFrom/dateTo, durationMin/Max→durationFrom/To, sortBy/Order→sort/order, agents/teams/queues→agentIds/teamCodes/queueIds
  */
 export async function searchRecordings(params: RecordingSearchParams): Promise<SearchResponse> {
   const searchParams = new URLSearchParams();
 
   if (params.q) searchParams.set('q', params.q);
+  // API expects dateFrom/dateTo; convert datePreset to range when no explicit dates
   if (params.dateFrom) searchParams.set('dateFrom', params.dateFrom);
   if (params.dateTo) searchParams.set('dateTo', params.dateTo);
-  if (params.datePreset) searchParams.set('datePreset', params.datePreset);
-  if (params.durationMin !== undefined) searchParams.set('durationMin', String(params.durationMin));
-  if (params.durationMax !== undefined) searchParams.set('durationMax', String(params.durationMax));
+  if (!params.dateFrom && !params.dateTo && params.datePreset) {
+    const range = dateRangeFromPreset(params.datePreset);
+    if (range.dateFrom) searchParams.set('dateFrom', range.dateFrom);
+    if (range.dateTo) searchParams.set('dateTo', range.dateTo);
+  }
+  if (params.durationMin !== undefined) searchParams.set('durationFrom', String(params.durationMin));
+  if (params.durationMax !== undefined) searchParams.set('durationTo', String(params.durationMax));
   if (params.direction) searchParams.set('direction', params.direction);
   if (params.hasAudio !== undefined) searchParams.set('hasAudio', String(params.hasAudio));
-  if (params.agents?.length) searchParams.set('agents', params.agents.join(','));
-  if (params.teams?.length) searchParams.set('teams', params.teams.join(','));
-  if (params.queues?.length) searchParams.set('queues', params.queues.join(','));
+  if (params.agents?.length) searchParams.set('agentIds', params.agents.join(','));
+  if (params.teams?.length) searchParams.set('teamCodes', params.teams.join(','));
+  if (params.queues?.length) searchParams.set('queueIds', params.queues.join(','));
   if (params.tags?.length) searchParams.set('tags', params.tags.join(','));
   if (params.ani) searchParams.set('ani', params.ani);
   if (params.dnis) searchParams.set('dnis', params.dnis);
-  if (params.sortBy) searchParams.set('sortBy', params.sortBy);
-  if (params.sortOrder) searchParams.set('sortOrder', params.sortOrder);
+  if (params.sortBy) searchParams.set('sort', params.sortBy);
+  if (params.sortOrder) searchParams.set('order', params.sortOrder);
   if (params.page) searchParams.set('page', String(params.page));
   if (params.pageSize) searchParams.set('pageSize', String(params.pageSize));
 

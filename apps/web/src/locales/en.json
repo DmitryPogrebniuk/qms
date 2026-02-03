@@ -198,7 +198,7 @@
     "downloadError": "Failed to download",
     "metadataCopied": "Metadata copied to clipboard",
     "details": "Recording Details",
-    "audioError": "Failed to load audio",
+    "audioError": "Failed to load audio. If you see 503, check MediaSense integration and server availability.",
     "backward": "Back 10s",
     "forward": "Forward 10s",
     "tab": {
