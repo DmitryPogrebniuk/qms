@@ -46,7 +46,7 @@ export interface ExportJob {
 export class ExportService implements OnModuleInit {
   private readonly logger = new Logger('ExportService');
   private readonly exportDir: string;
-  private readonly maxSyncDuration = 60; // seconds - above this, use async
+  private readonly maxSyncDuration = 180; // seconds - above 3 min, use async (reduces 202 responses)
   private ffmpegAvailable = false;
 
   constructor(

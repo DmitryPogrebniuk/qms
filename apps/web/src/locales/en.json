@@ -199,6 +199,7 @@
     "downloading": "Downloading...",
     "downloadComplete": "Download complete",
     "downloadError": "Failed to download",
+    "downloadExportTimeout": "Conversion is taking too long. Please try again later.",
     "mediasenseUnavailable": "MediaSense unavailable. Check integration settings (MEDIASENSE_HOST, credentials) and MediaSense server availability.",
     "metadataCopied": "Metadata copied to clipboard",
     "details": "Recording Details",

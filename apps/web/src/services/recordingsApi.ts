@@ -314,15 +314,60 @@ export function getStreamUrl(recordingId: string): string {
 }
 
 /**
- * Download recording as MP3
+ * Download exported file (when job is COMPLETED)
+ */
+async function downloadExportFile(jobId: string): Promise<Blob> {
+  const response = await httpClient.get<Blob>(`/recordings/exports/${jobId}/download`, {
+    responseType: 'blob',
+    validateStatus: () => true,
+  });
+  if (response.status !== 200) {
+    throw new Error(`Export download failed: HTTP ${response.status}`);
+  }
+  const blob = response.data;
+  if (blob instanceof Blob && (blob.size === 0 || (response.headers['content-type'] || '').includes('application/json'))) {
+    throw new Error('MEDIASENSE_UNAVAILABLE');
+  }
+  return blob;
+}
+
+/**
+ * Download recording as MP3 (or wav/ogg).
+ * Handles 202 (async export): polls until ready, then downloads.
  */
 export async function downloadRecording(recordingId: string, format: string = 'mp3'): Promise<Blob> {
   const response = await httpClient.get<Blob>(`/recordings/${recordingId}/download?format=${format}`, {
     responseType: 'blob',
-    validateStatus: () => true, // accept all to validate and avoid saving error body as file
+    validateStatus: () => true,
   });
   if (response.status === 503) {
     throw new Error('MEDIASENSE_UNAVAILABLE');
+  }
+  if (response.status === 202) {
+    // Async export in progress — parse jobId and poll until ready
+    const text = await (response.data as Blob).text();
+    let json: { jobId?: string };
+    try {
+      json = JSON.parse(text);
+    } catch {
+      throw new Error('EXPORT_PROCESSING');
+    }
+    const jobId = json.jobId;
+    if (!jobId) throw new Error('EXPORT_PROCESSING');
+    const maxAttempts = 60;
+    const intervalMs = 2000;
+    for (let i = 0; i < maxAttempts; i++) {
+      const job = await getExportStatus(jobId);
+      const status = (job.status || '').toUpperCase();
+      if (status === 'COMPLETED') {
+        return downloadExportFile(jobId);
+      }
+      if (status === 'FAILED') {
+        throw new Error(job.error || 'Export failed');
+      }
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+    throw new Error('EXPORT_TIMEOUT');
   }
   if (response.status < 200 || response.status >= 300) {
     throw new Error(response.status === 400 ? 'DOWNLOAD_BAD_REQUEST' : `HTTP ${response.status}`);

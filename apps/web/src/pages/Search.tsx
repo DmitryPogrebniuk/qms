@@ -177,9 +177,9 @@ export default function Search() {
       URL.revokeObjectURL(url);
       setSnackbar({ message: t('recordings.downloadComplete', 'Download complete'), severity: 'success' });
     } catch (err: any) {
-      const msg = err?.message === 'MEDIASENSE_UNAVAILABLE'
-        ? t('recordings.mediasenseUnavailable')
-        : t('recordings.downloadError', 'Failed to download');
+      let msg = t('recordings.downloadError', 'Failed to download');
+      if (err?.message === 'MEDIASENSE_UNAVAILABLE') msg = t('recordings.mediasenseUnavailable');
+      else if (err?.message === 'EXPORT_TIMEOUT') msg = t('recordings.downloadExportTimeout');
       setSnackbar({ message: msg, severity: 'error' });
     }
   };
