@@ -1432,30 +1432,45 @@ export class MediaSenseClientService {
 
     // 2) Fallback: querySessions for date range (when startTime available)
     if (startTime) {
-      try {
-        const from = new Date(startTime);
-        from.setHours(0, 0, 0, 0);
-        const to = new Date(from);
-        to.setDate(to.getDate() + 1);
-        const res = await this.querySessions({
-          startTime: from.toISOString(),
-          endTime: to.toISOString(),
-          limit: 500,
-        });
-        if (res.success && res.data) {
-          const data = res.data as any;
-          const sessions = data?.responseBody?.sessions ?? data?.sessions ?? (Array.isArray(data) ? data : []);
-          const session = Array.isArray(sessions)
-            ? sessions.find((s: any) => (s.sessionId || s.id) === sessionId)
-            : null;
-          if (session) {
-            const urls = session.urls;
-            const trackUrl = session.tracks?.[0]?.downloadUrl;
-            return urls?.wavUrl || urls?.mp4Url || urls?.httpUrl || trackUrl || null;
+      const ranges: { from: Date; to: Date }[] = [
+        (() => {
+          const from = new Date(startTime);
+          from.setHours(0, 0, 0, 0);
+          const to = new Date(from);
+          to.setDate(to.getDate() + 1);
+          return { from, to };
+        })(),
+        (() => {
+          const from = new Date(startTime);
+          from.setDate(from.getDate() - 1);
+          from.setHours(0, 0, 0, 0);
+          const to = new Date(from);
+          to.setDate(to.getDate() + 3);
+          return { from, to };
+        })(),
+      ];
+      for (const { from, to } of ranges) {
+        try {
+          const res = await this.querySessions({
+            startTime: from.toISOString(),
+            endTime: to.toISOString(),
+            limit: 500,
+          });
+          if (res.success && res.data) {
+            const data = res.data as any;
+            const sessions = data?.responseBody?.sessions ?? data?.sessions ?? (Array.isArray(data) ? data : []);
+            const session = Array.isArray(sessions)
+              ? sessions.find((s: any) => (s.sessionId || s.id) === sessionId)
+              : null;
+            if (session) {
+              const urls = session.urls;
+              const trackUrl = session.tracks?.[0]?.downloadUrl;
+              return urls?.wavUrl || urls?.mp4Url || urls?.httpUrl || trackUrl || null;
+            }
           }
+        } catch {
+          // ignore, try next range
         }
-      } catch {
-        // ignore
       }
     }
 
@@ -1532,6 +1547,15 @@ export class MediaSenseClientService {
     if (!this.session || new Date() > this.session.expiresAt) {
       await this.login();
     }
+  }
+
+  /**
+   * Force re-login (clear session and obtain fresh one).
+   * Use when 404 suggests session may be invalid for media requests.
+   */
+  async forceReLogin(): Promise<void> {
+    this.session = null;
+    await this.login();
   }
 
   // ==================== Helper Methods ====================

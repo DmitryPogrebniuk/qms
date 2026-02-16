@@ -223,6 +223,7 @@ export const RecordingDetailsDrawer: React.FC<RecordingDetailsDrawerProps> = ({
       let msg = t('recordings.downloadError', 'Failed to download recording');
       if (err?.message === 'MEDIASENSE_UNAVAILABLE') msg = t('recordings.mediasenseUnavailable');
       else if (err?.message === 'EXPORT_TIMEOUT') msg = t('recordings.downloadExportTimeout');
+      else if (err?.message === 'DOWNLOAD_BAD_REQUEST') msg = t('recordings.downloadNoAudio');
       setError(msg);
     } finally {
       setDownloading(false);

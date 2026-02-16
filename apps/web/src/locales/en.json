@@ -202,6 +202,7 @@
     "downloadError": "Failed to download",
     "downloadExportTimeout": "Conversion is taking too long. Please try again later.",
     "mediasenseUnavailable": "MediaSense unavailable. Check integration settings (MEDIASENSE_HOST, credentials) and MediaSense server availability.",
+    "downloadNoAudio": "Audio for this recording is not available in MediaSense.",
     "metadataCopied": "Metadata copied to clipboard",
     "details": "Recording Details",
     "audioError": "Failed to load audio. If you see 503, check MediaSense integration and server availability.",
