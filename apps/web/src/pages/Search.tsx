@@ -38,6 +38,7 @@ import {
   searchRecordings,
   getRecording,
   downloadRecording,
+  buildDownloadFilename,
 } from '../services/recordingsApi';
 
 const DEFAULT_FILTERS: RecordingSearchParams = {
@@ -170,7 +171,7 @@ export default function Search() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `recording-${recording.id}.mp3`;
+      a.download = buildDownloadFilename(recording, 'mp3');
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

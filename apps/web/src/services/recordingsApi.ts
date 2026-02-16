@@ -332,6 +332,18 @@ async function downloadExportFile(jobId: string): Promise<Blob> {
 }
 
 /**
+ * Build download filename: IGTAS_YYYY-MM-DD_HH-MM-SS_DNIS_ANI.ext
+ */
+export function buildDownloadFilename(recording: Recording, format: string = 'mp3'): string {
+  const d = recording.startTime ? new Date(recording.startTime) : new Date();
+  const dateStr = d.toISOString().slice(0, 10);
+  const timeStr = d.toISOString().slice(11, 19).replace(/:/g, '-');
+  const dnis = (recording.dnis || '').replace(/[^0-9+]/g, '') || 'unknown';
+  const ani = (recording.ani || '').replace(/[^0-9+]/g, '') || 'unknown';
+  return `IGTAS_${dateStr}_${timeStr}_${dnis}_${ani}.${format}`;
+}
+
+/**
  * Download recording as MP3 (or wav/ogg).
  * Handles 202 (async export): polls until ready, then downloads.
  */

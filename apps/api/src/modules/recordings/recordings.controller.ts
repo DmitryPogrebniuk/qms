@@ -388,7 +388,10 @@ export class RecordingsController {
       throw new NotFoundException(downloadResult.error || 'Export file not found');
     }
 
-    const filename = `recording-${job.recordingId}.${job.format}`;
+    const recording = await this.recordingsService.getRecordingBasic(job.recordingId);
+    const filename = recording
+      ? this.buildFilename(recording, job.format)
+      : `IGTAS_unknown_${job.recordingId}.${job.format}`;
     
     res.setHeader('Content-Type', downloadResult.contentType!);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -516,14 +519,11 @@ export class RecordingsController {
   // ============================================================================
 
   private buildFilename(recording: any, format: string): string {
-    const date = new Date(recording.startTime);
-    const dateStr = date.toISOString().replace(/[:.]/g, '-').substring(0, 19);
-    const agent = recording.agentName || recording.agentId || 'unknown';
-    const ani = recording.ani || '';
-    
-    // Sanitize for filename
-    const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 30);
-    
-    return `recording_${dateStr}_${sanitize(agent)}_${sanitize(ani)}.${format}`;
+    const d = new Date(recording.startTime);
+    const dateStr = d.toISOString().slice(0, 10); // YYYY-MM-DD
+    const timeStr = d.toISOString().slice(11, 19).replace(/:/g, '-'); // HH-MM-SS
+    const dnis = (recording.dnis || '').replace(/[^0-9+]/g, '') || 'unknown';
+    const ani = (recording.ani || '').replace(/[^0-9+]/g, '') || 'unknown';
+    return `IGTAS_${dateStr}_${timeStr}_${dnis}_${ani}.${format}`;
   }
 }

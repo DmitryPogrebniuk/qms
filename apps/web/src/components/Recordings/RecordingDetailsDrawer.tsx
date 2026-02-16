@@ -59,6 +59,7 @@ import {
   addTag,
   addNote,
   downloadRecording,
+  buildDownloadFilename,
   logPlayback,
 } from '../../services/recordingsApi';
 
@@ -231,7 +232,7 @@ export const RecordingDetailsDrawer: React.FC<RecordingDetailsDrawerProps> = ({
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `recording-${recording.id}.mp3`;
+      a.download = buildDownloadFilename(recording, 'mp3');
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
