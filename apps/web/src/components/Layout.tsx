@@ -4,7 +4,6 @@ import { Outlet, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useState, useEffect } from 'react'
 import LanguageSwitcher from './LanguageSwitcher'
-import ThemeSwitcher from './ThemeSwitcher'
 import { useHttpClient } from '@/hooks/useHttpClient'
 
 export default function Layout() {
@@ -64,7 +63,6 @@ export default function Layout() {
           <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 'bold' }}>
             Cisco QMS
           </Typography>
-          <ThemeSwitcher />
           <LanguageSwitcher />
           <Button color="inherit" onClick={handleLogout}>
             {t('auth.logout')}

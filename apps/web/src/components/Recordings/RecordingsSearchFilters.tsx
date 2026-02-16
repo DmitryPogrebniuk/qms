@@ -9,7 +9,6 @@ import {
   Typography,
   TextField,
   Button,
-  ButtonGroup,
   Slider,
   FormControlLabel,
   Checkbox,
@@ -148,7 +147,8 @@ export const RecordingsSearchFilters: React.FC<RecordingsSearchFiltersProps> = (
   return (
     <Box
       sx={{
-        width: 300,
+        width: 340,
+        minWidth: 340,
         height: '100%',
         overflow: 'auto',
         borderRight: 1,
@@ -180,17 +180,22 @@ export const RecordingsSearchFilters: React.FC<RecordingsSearchFiltersProps> = (
         />
 
         {/* Action Buttons */}
-        <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
+        <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
           <Button
             variant="contained"
-            fullWidth
+            sx={{ flex: 1, minWidth: 0 }}
             onClick={onSearch}
             disabled={loading}
             startIcon={loading ? <CircularProgress size={16} /> : <SearchIcon />}
           >
             {t('common.search', 'Search')}
           </Button>
-          <Button variant="outlined" onClick={onClear} startIcon={<ClearIcon />}>
+          <Button
+            variant="outlined"
+            onClick={onClear}
+            startIcon={<ClearIcon />}
+            sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}
+          >
             {t('common.clear', 'Clear')}
           </Button>
         </Box>
@@ -251,10 +256,10 @@ export const RecordingsSearchFilters: React.FC<RecordingsSearchFiltersProps> = (
       <Accordion defaultExpanded>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
           <TimerIcon sx={{ mr: 1 }} />
-          <Typography>{t('recordings.duration', 'Duration')}</Typography>
+          <Typography noWrap>{t('recordings.duration', 'Duration')}</Typography>
         </AccordionSummary>
         <AccordionDetails>
-          <Box sx={{ px: 1 }}>
+          <Box sx={{ px: 1, minWidth: 0 }}>
             <Slider
               value={durationRange}
               onChange={handleDurationChange}
@@ -265,9 +270,10 @@ export const RecordingsSearchFilters: React.FC<RecordingsSearchFiltersProps> = (
               marks={DURATION_MARKS}
               valueLabelDisplay="auto"
               valueLabelFormat={(v) => formatDuration(v)}
+              sx={{ width: 'calc(100% - 16px)' }}
             />
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              {formatDuration(durationRange[0])} - {formatDuration(durationRange[1])}
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1, whiteSpace: 'nowrap' }}>
+              {formatDuration(durationRange[0])} — {formatDuration(durationRange[1])}
             </Typography>
           </Box>
         </AccordionDetails>
@@ -277,38 +283,46 @@ export const RecordingsSearchFilters: React.FC<RecordingsSearchFiltersProps> = (
       <Accordion defaultExpanded>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
           <PhoneIcon sx={{ mr: 1 }} />
-          <Typography>{t('recordings.direction', 'Direction')}</Typography>
+          <Typography noWrap>{t('recordings.direction', 'Direction')}</Typography>
         </AccordionSummary>
         <AccordionDetails>
-          <ButtonGroup fullWidth size="small">
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
             <Button
+              size="small"
               variant={!filters.direction ? 'contained' : 'outlined'}
               onClick={() => handleDirectionChange(undefined)}
+              sx={{ minWidth: 0, flex: '1 1 auto' }}
             >
               {t('common.all', 'All')}
             </Button>
             <Button
+              size="small"
               variant={filters.direction === 'inbound' ? 'contained' : 'outlined'}
               onClick={() => handleDirectionChange('inbound')}
-              startIcon={<InboundIcon />}
+              startIcon={<InboundIcon sx={{ fontSize: 18 }} />}
+              sx={{ minWidth: 0, flex: '1 1 auto', whiteSpace: 'nowrap' }}
             >
-              {t('recordings.inbound', 'In')}
+              {t('recordings.inboundShort', 'Вхід')}
             </Button>
             <Button
+              size="small"
               variant={filters.direction === 'outbound' ? 'contained' : 'outlined'}
               onClick={() => handleDirectionChange('outbound')}
-              startIcon={<OutboundIcon />}
+              startIcon={<OutboundIcon sx={{ fontSize: 18 }} />}
+              sx={{ minWidth: 0, flex: '1 1 auto', whiteSpace: 'nowrap' }}
             >
-              {t('recordings.outbound', 'Out')}
+              {t('recordings.outboundShort', 'Вихід')}
             </Button>
             <Button
+              size="small"
               variant={filters.direction === 'internal' ? 'contained' : 'outlined'}
               onClick={() => handleDirectionChange('internal')}
-              startIcon={<InternalIcon />}
+              startIcon={<InternalIcon sx={{ fontSize: 18 }} />}
+              sx={{ minWidth: 0, flex: '1 1 auto', whiteSpace: 'nowrap' }}
             >
-              {t('recordings.internal', 'Internal')}
+              {t('recordings.internalShort', 'Внутр')}
             </Button>
-          </ButtonGroup>
+          </Box>
         </AccordionDetails>
       </Accordion>
 

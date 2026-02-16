@@ -102,7 +102,7 @@ const ciscoTheme = createTheme({
 export function ThemeContextProvider({ children }: { children: ReactNode }) {
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
     const saved = localStorage.getItem('qms_theme_mode')
-    return (saved as ThemeMode) || 'default'
+    return (saved as ThemeMode) || 'cisco' // CUIC default
   })
 
   useEffect(() => {

@@ -22,7 +22,6 @@ import ScheduleIcon from '@mui/icons-material/Schedule'
 import SchoolIcon from '@mui/icons-material/School'
 import PersonIcon from '@mui/icons-material/Person'
 import LanguageSwitcher from './LanguageSwitcher'
-import ThemeSwitcher from './ThemeSwitcher'
 import { useHttpClient } from '@/hooks/useHttpClient'
 
 // Cisco CUIC style sidebar navigation item
@@ -221,7 +220,6 @@ export default function CiscoLayout() {
           </Typography>
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <ThemeSwitcher />
             <LanguageSwitcher />
             
             <IconButton size="small">
