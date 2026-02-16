@@ -159,19 +159,19 @@ export class RecordingsSearchService {
             where: { id: { in: agentIds } },
             select: { id: true, fullName: true },
           })
-        : [],
+        : [] as { id: string; fullName: string }[],
       teamCodes.length > 0
         ? this.prisma.team.findMany({
             where: { teamCode: { in: teamCodes } },
             select: { teamCode: true, displayName: true },
           })
-        : [],
+        : [] as { teamCode: string; displayName: string }[],
     ]);
 
-    const agentMap = new Map(agents.map((a) => [a.id, a.fullName]));
-    const teamMap = new Map(teams.map((t) => [t.teamCode, t.displayName]));
+    const agentMap = new Map<string, string>(agents.map((a) => [a.id, a.fullName] as [string, string]));
+    const teamMap = new Map<string, string>(teams.map((t) => [t.teamCode, t.displayName] as [string, string]));
 
-    return items.map((item) => ({
+    return items.map((item): RecordingSearchResult => ({
       ...item,
       agentName: item.agentName || (item.agentId ? agentMap.get(item.agentId) : undefined),
       teamName: item.teamName || (item.teamCode ? teamMap.get(item.teamCode) : undefined),
