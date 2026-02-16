@@ -1412,6 +1412,18 @@ export class MediaSenseClientService {
   }
 
   /**
+   * Get fresh media URL for a session (wavUrl/mp4Url) from MediaSense.
+   * Use when stored audioUrl returns 404 - URLs may expire or change.
+   */
+  async getFreshMediaUrl(sessionId: string): Promise<string | null> {
+    const res = await this.getSessionById(sessionId);
+    if (!res.success || !res.data) return null;
+    const session = (res.data as any)?.session ?? (res.data as any)?.sessions?.[0] ?? res.data;
+    const urls = session?.urls;
+    return urls?.wavUrl || urls?.mp4Url || urls?.httpUrl || null;
+  }
+
+  /**
    * Stream media from an absolute URL (e.g. urls.wavUrl from getSessions).
    * Use when recording.audioUrl is set from sync; avoids API endpoint 404.
    * Per Cisco Dev Guide 9.x: use Basic Auth for media HTTP; do not cache redirected URL; add timeout=n (seconds) for slow networks.

@@ -175,13 +175,9 @@ export class RecordingsStreamService {
 
     const contentType = this.getContentType(recording.audioFormat || 'wav');
 
-    try {
-      // Prefer direct URL from sync (MediaSense 11.5 urls.wavUrl) when available
-      if (audioUrl) {
-        const streamResult = await this.mediaSenseClient.streamFromUrl(
-          audioUrl,
-          rangeHeader,
-        );
+    const tryStream = async (url: string | null): Promise<StreamResult> => {
+      if (url) {
+        const streamResult = await this.mediaSenseClient.streamFromUrl(url, rangeHeader);
         return {
           stream: streamResult.stream,
           contentType: streamResult.headers['Content-Type'] || contentType,
@@ -192,14 +188,11 @@ export class RecordingsStreamService {
           statusCode: streamResult.statusCode,
         };
       }
-
-      // Fallback: stream via API endpoint
       const streamResult = await this.mediaSenseClient.streamMedia(
-        recording.mediasenseSessionId,
+        recording.mediasenseSessionId!,
         0,
         rangeHeader,
       );
-
       return {
         stream: streamResult.stream,
         contentType: streamResult.headers['Content-Type'] || contentType,
@@ -209,7 +202,29 @@ export class RecordingsStreamService {
         contentRange: streamResult.headers['Content-Range'],
         statusCode: streamResult.statusCode,
       };
-    } catch (error) {
+    };
+
+    try {
+      let result = await tryStream(audioUrl);
+      return result;
+    } catch (error: any) {
+      // On 404, stored audioUrl may be stale - refresh from MediaSense and retry once
+      const is404 = error?.message?.includes('404') || error?.response?.status === 404;
+      if (is404 && recording.mediasenseSessionId && audioUrl) {
+        this.logger.warn(`Stream 404 for ${recordingId}, refreshing URL from MediaSense`);
+        try {
+          const freshUrl = await this.mediaSenseClient.getFreshMediaUrl(recording.mediasenseSessionId);
+          if (freshUrl) {
+            await this.prisma.recording.update({
+              where: { id: recordingId },
+              data: { audioUrl: freshUrl },
+            });
+            return tryStream(freshUrl);
+          }
+        } catch (retryErr) {
+          this.logger.warn(`Retry after 404 failed for ${recordingId}:`, (retryErr as Error).message);
+        }
+      }
       this.logger.error(`Error streaming audio for ${recordingId}:`, error);
       throw error;
     }
@@ -240,24 +255,46 @@ export class RecordingsStreamService {
 
     await this.ensureClientConfigured();
 
-    if (recording.audioUrl) {
-      const streamResult = await this.mediaSenseClient.streamFromUrl(recording.audioUrl);
+    const tryStream = async (url: string | null) => {
+      if (url) {
+        const streamResult = await this.mediaSenseClient.streamFromUrl(url);
+        return streamResult.stream;
+      }
+      const streamResult = await this.mediaSenseClient.streamMedia(recording.mediasenseSessionId!);
+      return streamResult.stream;
+    };
+
+    try {
+      const stream = await tryStream(recording.audioUrl);
       return {
-        stream: streamResult.stream,
+        stream,
         format: recording.audioFormat || 'wav',
         size: recording.audioSizeBytes ? Number(recording.audioSizeBytes) : undefined,
       };
+    } catch (error: any) {
+      const is404 = error?.message?.includes('404') || error?.response?.status === 404;
+      if (is404 && recording.mediasenseSessionId && recording.audioUrl) {
+        this.logger.warn(`Download 404 for ${recordingId}, refreshing URL from MediaSense`);
+        try {
+          const freshUrl = await this.mediaSenseClient.getFreshMediaUrl(recording.mediasenseSessionId);
+          if (freshUrl) {
+            await this.prisma.recording.update({
+              where: { id: recordingId },
+              data: { audioUrl: freshUrl },
+            });
+            const stream = await tryStream(freshUrl);
+            return {
+              stream,
+              format: recording.audioFormat || 'wav',
+              size: recording.audioSizeBytes ? Number(recording.audioSizeBytes) : undefined,
+            };
+          }
+        } catch (retryErr) {
+          this.logger.warn(`Download retry after 404 failed for ${recordingId}:`, (retryErr as Error).message);
+        }
+      }
+      throw error;
     }
-
-    const streamResult = await this.mediaSenseClient.streamMedia(
-      recording.mediasenseSessionId,
-    );
-
-    return {
-      stream: streamResult.stream,
-      format: recording.audioFormat || 'wav',
-      size: recording.audioSizeBytes ? Number(recording.audioSizeBytes) : undefined,
-    };
   }
 
   private getContentType(format: string): string {
