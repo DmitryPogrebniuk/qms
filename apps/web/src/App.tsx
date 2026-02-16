@@ -1,6 +1,7 @@
 import CssBaseline from '@mui/material/CssBaseline'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
+import { useInactivityTimeout } from '@/hooks/useHttpClient'
 import Layout from '@/components/Layout'
 import CiscoLayout from '@/components/CiscoLayout'
 import Login from '@/pages/Login'
@@ -14,6 +15,11 @@ import Maintenance from '@/pages/Maintenance'
 import About from '@/pages/About'
 import AuditLog from '@/pages/AuditLog'
 import { ThemeContextProvider, useThemeMode } from '@/contexts/ThemeContext'
+
+function SessionTimeoutHandler({ children }: { children: React.ReactNode }) {
+  useInactivityTimeout()
+  return <>{children}</>
+}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(true)
@@ -31,7 +37,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <div>Loading...</div>
   }
 
-  return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />
+  return isAuthenticated ? (
+    <SessionTimeoutHandler>{children}</SessionTimeoutHandler>
+  ) : (
+    <Navigate to="/login" replace />
+  )
 }
 
 function LayoutSwitcher() {

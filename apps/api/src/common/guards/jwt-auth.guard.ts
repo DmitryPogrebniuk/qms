@@ -1,15 +1,25 @@
-import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  UnauthorizedException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
+import { SessionService } from '@/modules/auth/session.service';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   constructor(
     private readonly jwtService: JwtService,
     private readonly reflector: Reflector,
+    @Inject(forwardRef(() => SessionService))
+    private readonly sessionService: SessionService,
   ) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.get<boolean>('isPublic', context.getHandler());
     if (isPublic) {
       return true;
@@ -30,9 +40,19 @@ export class JwtAuthGuard implements CanActivate {
 
     try {
       const payload = this.jwtService.verify(token);
+      const sessionId = payload.sessionId;
+
+      if (sessionId) {
+        const valid = await this.sessionService.validateAndTouch(sessionId);
+        if (!valid) {
+          throw new UnauthorizedException('Session expired due to inactivity');
+        }
+      }
+
       request.user = payload;
       return true;
-    } catch (err) {
+    } catch (err: any) {
+      if (err instanceof UnauthorizedException) throw err;
       throw new UnauthorizedException('Invalid or expired token');
     }
   }

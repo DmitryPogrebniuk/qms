@@ -127,7 +127,12 @@ export default function CiscoLayout() {
 
   const allNavItems = [...mainNavItems, ...adminNavItems, helpNavItem].filter(item => item.path)
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await client.post('/auth/logout')
+    } catch {
+      // Ignore - clear local state anyway
+    }
     localStorage.removeItem('jwt_token')
     navigate('/login')
     setAnchorEl(null)

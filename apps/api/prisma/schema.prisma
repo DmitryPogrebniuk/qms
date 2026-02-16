@@ -38,6 +38,7 @@ model User {
   disputeResolutions Dispute[]
   auditLogs AuditLog[]
   supervisedTeams Team[]
+  sessions Session[]
 
   @@index([keycloakId])
   @@index([agentId])
@@ -49,6 +50,21 @@ enum Role {
   QA
   SUPERVISOR
   USER
+}
+
+model Session {
+  id String @id @default(cuid())
+  userId String
+  createdAt DateTime @default(now()) @db.Timestamptz()
+  lastActivityAt DateTime @default(now()) @db.Timestamptz()
+  expiresAt DateTime @db.Timestamptz()
+  ipAddress String? @db.VarChar(50)
+  userAgent String? @db.VarChar(500)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 // ============================================================================

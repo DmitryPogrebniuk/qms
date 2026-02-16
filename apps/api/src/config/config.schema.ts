@@ -23,6 +23,14 @@ export const configValidationSchema = Joi.object({
   KEYCLOAK_CLIENT_SECRET: Joi.string().required(),
   JWT_SECRET: Joi.string().required(),
 
+  // Session (enterprise security)
+  SESSION_INACTIVITY_TIMEOUT_MS: Joi.number()
+    .default(600000)
+    .description('Inactivity timeout in ms (default 10 min)'),
+  SESSION_ABSOLUTE_TIMEOUT_MS: Joi.number()
+    .default(28800000)
+    .description('Max session duration in ms (default 8h)'),
+
   // UCCX (supports HA with multiple nodes)
   UCCX_NODES: Joi.string().required().description('Comma-separated UCCX nodes (e.g., uccx1.example.com:8443,uccx2.example.com:8443)'),
   UCCX_USERNAME: Joi.string().required(),

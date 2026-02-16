@@ -5,6 +5,7 @@ import { PrismaService } from '@/common/prisma/prisma.service';
 import axios from 'axios';
 import * as bcrypt from 'bcrypt';
 import { UserClaims, Role } from '@/types/shared';
+import { SessionService } from './session.service';
 
 @Injectable()
 export class AuthService {
@@ -14,7 +15,18 @@ export class AuthService {
     private readonly configService: ConfigService,
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
+    private readonly sessionService: SessionService,
   ) {}
+
+  /**
+   * Verify Keycloak token, sync user, create session, return JWT
+   */
+  async verifyKeycloakAndCreateSession(token: string): Promise<{ claims: UserClaims; jwt: string }> {
+    const claims = await this.validateKeycloakToken(token);
+    const sessionId = await this.sessionService.createSession(claims.sub);
+    const jwt = await this.generateToken(claims, sessionId);
+    return { claims, jwt };
+  }
 
   /**
    * Verify Keycloak token and sync/create user in database
@@ -60,8 +72,12 @@ export class AuthService {
         roles,
       });
 
+      const user = await this.prisma.user.findUnique({
+        where: { keycloakId: payload.sub },
+        select: { id: true },
+      });
       return {
-        sub: payload.sub,
+        sub: user?.id ?? payload.sub,
         preferred_username: payload.preferred_username,
         email: payload.email,
         name: payload.name,
@@ -74,16 +90,18 @@ export class AuthService {
   }
 
   /**
-   * Generate JWT for authenticated users
+   * Generate JWT for authenticated users (with sessionId for server-side validation)
    */
-  async generateToken(claims: UserClaims): Promise<string> {
-    return this.jwtService.sign({
+  async generateToken(claims: UserClaims, sessionId?: string): Promise<string> {
+    const payload: Record<string, unknown> = {
       sub: claims.sub,
       preferred_username: claims.preferred_username,
       email: claims.email,
       name: claims.name,
       roles: claims.roles,
-    });
+    };
+    if (sessionId) payload.sessionId = sessionId;
+    return this.jwtService.sign(payload);
   }
 
   /**
@@ -165,7 +183,11 @@ export class AuthService {
   /**
    * Local login with username and password
    */
-  async loginLocal(username: string, password: string): Promise<{ jwt: string; user: any }> {
+  async loginLocal(
+    username: string,
+    password: string,
+    opts?: { ipAddress?: string; userAgent?: string },
+  ): Promise<{ jwt: string; user: any }> {
     if (!username || !password) {
       throw new BadRequestException('Username and password are required');
     }
@@ -197,7 +219,6 @@ export class AuthService {
       throw new UnauthorizedException('Invalid username or password');
     }
 
-    // Generate JWT token
     const claims: UserClaims = {
       sub: user.id,
       preferred_username: user.username,
@@ -206,7 +227,11 @@ export class AuthService {
       roles: [user.role as unknown as Role],
     };
 
-    const jwt = await this.generateToken(claims);
+    const sessionId = await this.sessionService.createSession(user.id, {
+      ipAddress: opts?.ipAddress,
+      userAgent: opts?.userAgent,
+    });
+    const jwt = await this.generateToken(claims, sessionId);
 
     return {
       jwt,

@@ -46,7 +46,12 @@ export default function Layout() {
 
   const helpItem = { label: t('about.title', 'Довідка'), path: '/about' }
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await client.post('/auth/logout')
+    } catch {
+      // Ignore
+    }
     localStorage.removeItem('jwt_token')
     navigate('/login')
   }
