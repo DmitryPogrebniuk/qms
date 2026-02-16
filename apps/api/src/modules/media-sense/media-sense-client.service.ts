@@ -1412,15 +1412,64 @@ export class MediaSenseClientService {
   }
 
   /**
-   * Get fresh media URL for a session (wavUrl/mp4Url) from MediaSense.
+   * Get fresh media URL for a session (wavUrl/mp4Url/downloadUrl) from MediaSense.
    * Use when stored audioUrl returns 404 - URLs may expire or change.
+   * Tries: getSessionById → querySessions (if startTime) → construct from sessionId.
    */
-  async getFreshMediaUrl(sessionId: string): Promise<string | null> {
-    const res = await this.getSessionById(sessionId);
-    if (!res.success || !res.data) return null;
-    const session = (res.data as any)?.session ?? (res.data as any)?.sessions?.[0] ?? res.data;
-    const urls = session?.urls;
-    return urls?.wavUrl || urls?.mp4Url || urls?.httpUrl || null;
+  async getFreshMediaUrl(sessionId: string, startTime?: string): Promise<string | null> {
+    // 1) Try sessionBySessionId (may 404 in some MediaSense versions)
+    try {
+      const res = await this.getSessionById(sessionId);
+      if (res.success && res.data) {
+        const session = (res.data as any)?.session ?? (res.data as any)?.sessions?.[0] ?? res.data;
+        const urls = session?.urls;
+        const trackUrl = session?.tracks?.[0]?.downloadUrl;
+        return urls?.wavUrl || urls?.mp4Url || urls?.httpUrl || trackUrl || null;
+      }
+    } catch {
+      // sessionBySessionId often 404 in MediaSense 11.5
+    }
+
+    // 2) Fallback: querySessions for date range (when startTime available)
+    if (startTime) {
+      try {
+        const from = new Date(startTime);
+        from.setHours(0, 0, 0, 0);
+        const to = new Date(from);
+        to.setDate(to.getDate() + 1);
+        const res = await this.querySessions({
+          startTime: from.toISOString(),
+          endTime: to.toISOString(),
+          limit: 500,
+        });
+        if (res.success && res.data) {
+          const data = res.data as any;
+          const sessions = data?.responseBody?.sessions ?? data?.sessions ?? (Array.isArray(data) ? data : []);
+          const session = Array.isArray(sessions)
+            ? sessions.find((s: any) => (s.sessionId || s.id) === sessionId)
+            : null;
+          if (session) {
+            const urls = session.urls;
+            const trackUrl = session.tracks?.[0]?.downloadUrl;
+            return urls?.wavUrl || urls?.mp4Url || urls?.httpUrl || trackUrl || null;
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // 3) Construct URL from known MediaSense 11.5 pattern (host:8446/recordedMedia/oramedia/wav/{id}.wav)
+    if (this.config?.baseUrl) {
+      try {
+        const u = new URL(this.config.baseUrl);
+        const host = u.hostname;
+        return `https://${host}:8446/recordedMedia/oramedia/wav/${sessionId}.wav`;
+      } catch {
+        // ignore
+      }
+    }
+    return null;
   }
 
   /**

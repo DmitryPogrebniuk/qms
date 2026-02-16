@@ -2,6 +2,7 @@
   "common": {
     "ok": "OK",
     "cancel": "Скасувати",
+    "close": "Закрити",
     "save": "Зберегти",
     "delete": "Видалити",
     "edit": "Редагувати",
@@ -296,7 +297,13 @@
     "noLogs": "Журнали недоступні",
     "loadMore": "Завантажити ще",
     "clearLogsConfirmTitle": "Очистити журнали?",
-    "clearLogsConfirmText": "Ви впевнені, що хочете очистити всі журнали інтеграції MediaSense? Цю дію неможливо скасувати."
+    "clearLogsConfirmText": "Ви впевнені, що хочете очистити всі журнали інтеграції MediaSense? Цю дію неможливо скасувати.",
+    "createSupportRequest": "Створити звернення в підтримку",
+    "supportRequestTitle": "Звернення в підтримку Cisco MediaSense",
+    "supportRequestCopy": "Копіювати",
+    "supportRequestDownload": "Завантажити .md",
+    "supportRequestCopied": "Скопійовано в буфер обміну",
+    "supportRequestHint": "Скопіюйте або завантажте документ для відправки в Cisco Support"
   },
   "maintenance": {
     "title": "Обслуговування системи",

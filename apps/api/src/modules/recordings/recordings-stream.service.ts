@@ -139,6 +139,7 @@ export class RecordingsStreamService {
         audioFormat: true,
         audioSizeBytes: true,
         hasAudio: true,
+        startTime: true,
       },
     });
 
@@ -149,17 +150,21 @@ export class RecordingsStreamService {
     let audioUrl = recording.audioUrl;
     let canStream = recording.hasAudio || Boolean(audioUrl);
 
-    // If no URL yet but we have sessionId, try to get media URL from MediaSense once
+    // If no URL yet but we have sessionId, try getFreshMediaUrl (querySessions or construct URL)
     if (!canStream && recording.mediasenseSessionId) {
       await this.ensureClientConfigured();
       try {
-        const mediaInfo = await this.mediaSenseClient.getMediaUrl(recording.mediasenseSessionId);
-        if (mediaInfo.success && mediaInfo.data) {
+        const startTime = recording.startTime?.toISOString?.() ?? (recording as any).startTime;
+        const freshUrl = await this.mediaSenseClient.getFreshMediaUrl(
+          recording.mediasenseSessionId,
+          startTime,
+        );
+        if (freshUrl) {
           await this.prisma.recording.update({
             where: { id: recordingId },
-            data: { hasAudio: true, audioUrl: mediaInfo.data, mediaCheckedAt: new Date() },
+            data: { hasAudio: true, audioUrl: freshUrl, mediaCheckedAt: new Date() },
           });
-          audioUrl = mediaInfo.data;
+          audioUrl = freshUrl;
           canStream = true;
         }
       } catch {
@@ -210,10 +215,14 @@ export class RecordingsStreamService {
     } catch (error: any) {
       // On 404, stored audioUrl may be stale - refresh from MediaSense and retry once
       const is404 = error?.message?.includes('404') || error?.response?.status === 404;
-      if (is404 && recording.mediasenseSessionId && audioUrl) {
+      if (is404 && recording.mediasenseSessionId) {
         this.logger.warn(`Stream 404 for ${recordingId}, refreshing URL from MediaSense`);
         try {
-          const freshUrl = await this.mediaSenseClient.getFreshMediaUrl(recording.mediasenseSessionId);
+          const startTime = recording.startTime?.toISOString?.() ?? (recording as any).startTime;
+          const freshUrl = await this.mediaSenseClient.getFreshMediaUrl(
+            recording.mediasenseSessionId,
+            startTime,
+          );
           if (freshUrl) {
             await this.prisma.recording.update({
               where: { id: recordingId },
@@ -246,6 +255,7 @@ export class RecordingsStreamService {
         audioUrl: true,
         audioFormat: true,
         audioSizeBytes: true,
+        startTime: true,
       },
     });
 
@@ -273,10 +283,14 @@ export class RecordingsStreamService {
       };
     } catch (error: any) {
       const is404 = error?.message?.includes('404') || error?.response?.status === 404;
-      if (is404 && recording.mediasenseSessionId && recording.audioUrl) {
+      if (is404 && recording.mediasenseSessionId) {
         this.logger.warn(`Download 404 for ${recordingId}, refreshing URL from MediaSense`);
         try {
-          const freshUrl = await this.mediaSenseClient.getFreshMediaUrl(recording.mediasenseSessionId);
+          const startTime = recording.startTime?.toISOString?.() ?? (recording as any).startTime;
+          const freshUrl = await this.mediaSenseClient.getFreshMediaUrl(
+            recording.mediasenseSessionId,
+            startTime,
+          );
           if (freshUrl) {
             await this.prisma.recording.update({
               where: { id: recordingId },

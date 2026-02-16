@@ -2,6 +2,7 @@
   "common": {
     "ok": "OK",
     "cancel": "Cancel",
+    "close": "Close",
     "save": "Save",
     "delete": "Delete",
     "edit": "Edit",
@@ -292,7 +293,13 @@
     "noLogs": "No logs available",
     "loadMore": "Load More",
     "clearLogsConfirmTitle": "Clear Logs?",
-    "clearLogsConfirmText": "Are you sure you want to clear all MediaSense integration logs? This action cannot be undone."
+    "clearLogsConfirmText": "Are you sure you want to clear all MediaSense integration logs? This action cannot be undone.",
+    "createSupportRequest": "Create support request",
+    "supportRequestTitle": "Cisco MediaSense Support Request",
+    "supportRequestCopy": "Copy",
+    "supportRequestDownload": "Download .md",
+    "supportRequestCopied": "Copied to clipboard",
+    "supportRequestHint": "Copy or download the document to send to Cisco Support"
   },
   "maintenance": {
     "title": "System Maintenance",

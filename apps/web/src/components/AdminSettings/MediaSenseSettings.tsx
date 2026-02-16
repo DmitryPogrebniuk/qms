@@ -33,6 +33,9 @@ import ErrorIcon from '@mui/icons-material/Error'
 import WarningIcon from '@mui/icons-material/Warning'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import BuildIcon from '@mui/icons-material/Build'
+import ContactSupportIcon from '@mui/icons-material/ContactSupport'
+import ContentCopyIcon from '@mui/icons-material/ContentCopy'
+import DownloadIcon from '@mui/icons-material/Download'
 import { getSyncDiagnostics, type SyncDiagnostics } from '../../services/recordingsApi'
 
 interface MediaSenseConfig {
@@ -98,6 +101,8 @@ export default function MediaSenseSettings() {
   const [hasMoreLogs, setHasMoreLogs] = useState(false)
   const [logCursor, setLogCursor] = useState<string | null>(null)
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
+  const [supportRequestDialogOpen, setSupportRequestDialogOpen] = useState(false)
+  const [supportRequestCopied, setSupportRequestCopied] = useState(false)
 
   // Load settings
   useEffect(() => {
@@ -232,6 +237,120 @@ export default function MediaSenseSettings() {
     } catch (error) {
       console.error('Failed to update log level:', error)
     }
+  }
+
+  const buildSupportRequestText = (): string => {
+    const lines: string[] = []
+    lines.push('# MediaSense API Integration - Support Request')
+    lines.push('')
+    lines.push(`**Date:** ${new Date().toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' })}`)
+    lines.push('')
+    lines.push('---')
+    lines.push('')
+    lines.push('## Summary')
+    lines.push('')
+    lines.push('QMS integration with Cisco MediaSense encounters errors during playback and download of recordings.')
+    lines.push('')
+    lines.push('## Configuration')
+    lines.push('')
+    const host = config.apiUrl ? config.apiUrl.replace(/^https?:\/\//, '').replace(/\/$/, '') : '(not configured)'
+    lines.push(`- **MediaSense URL:** \`${config.apiUrl || '(not set)'}\``)
+    lines.push(`- **Host:** ${host}`)
+    lines.push(`- **Allow self-signed:** ${config.allowSelfSigned ?? false}`)
+    lines.push('')
+    if (testResult) {
+      lines.push('## Connection Test Result')
+      lines.push('')
+      lines.push(`- **Status:** ${testResult.success ? 'Success' : 'Failed'}`)
+      lines.push(`- **Message:** ${testResult.message}`)
+      if (testResult.details?.length) {
+        lines.push('')
+        lines.push('**Details:**')
+        testResult.details.forEach((d) => {
+          lines.push(`- ${d.step}: ${d.message}${d.duration ? ` (${d.duration}ms)` : ''}`)
+        })
+      }
+      if (testResult.recommendations?.length) {
+        lines.push('')
+        lines.push('**Recommendations:**')
+        testResult.recommendations.forEach((r) => lines.push(`- ${r}`))
+      }
+      lines.push('')
+    }
+    if (diagnosticsResult) {
+      lines.push('## Sync Diagnostics')
+      lines.push('')
+      lines.push(`- **Config enabled:** ${diagnosticsResult.config.enabled ? 'Yes' : 'No'}`)
+      lines.push(`- **Recordings in DB:** ${diagnosticsResult.recordingCount}`)
+      if (diagnosticsResult.syncState) {
+        lines.push(`- **Backfill complete:** ${diagnosticsResult.syncState.backfillComplete ? 'Yes' : 'No'}`)
+        lines.push(`- **Last sync:** ${diagnosticsResult.syncState.lastSyncTime || '—'}`)
+        lines.push(`- **Status:** ${diagnosticsResult.syncState.status || '—'}`)
+      }
+      if (diagnosticsResult.testFetch) {
+        lines.push(`- **Test fetch (24h):** ${diagnosticsResult.testFetch.count} sessions`)
+        if (diagnosticsResult.testFetch.error) {
+          lines.push(`- **Test fetch error:** ${diagnosticsResult.testFetch.error}`)
+        }
+      }
+      lines.push('')
+    }
+    const errorLogs = logs.filter((l) => l.level === 'ERROR' || l.level === 'WARN')
+    if (errorLogs.length > 0) {
+      lines.push('## Recent Errors/Warnings')
+      lines.push('')
+      errorLogs.slice(0, 20).forEach((log) => {
+        lines.push(`- **${log.timestamp}** [${log.level}] ${log.message}`)
+        if (log.context && Object.keys(log.context).length > 0) {
+          lines.push('  ```')
+          lines.push('  ' + JSON.stringify(log.context, null, 2).split('\n').join('\n  '))
+          lines.push('  ```')
+        }
+      })
+      lines.push('')
+    }
+    lines.push('## Issues Observed')
+    lines.push('')
+    lines.push('- **404 errors** – Some MediaSense API/media endpoints return 404 (Cisco System Error report)')
+    lines.push('- **responseCode 2001** – "No results were found for this client request" from query endpoints')
+    lines.push('- **Playback/Download** – Audio unavailable for some recordings despite successful sync')
+    lines.push('')
+    lines.push('## Questions for Cisco MediaSense Support')
+    lines.push('')
+    lines.push('1. Correct API authentication method for obtaining JSESSIONID via API?')
+    lines.push('2. Does MediaSense 11.5 support Basic Auth for query endpoints?')
+    lines.push('3. Why do some media URLs (8446/recordedMedia/...) return 404?')
+    lines.push('4. Correct endpoint/format for querySessions when responseCode 2001 is returned?')
+    lines.push('')
+    lines.push('## Contact')
+    lines.push('')
+    lines.push('**Organization:** [Your organization]')
+    lines.push('**Contact:** [Your name]')
+    lines.push('**Email:** [Your email]')
+    lines.push('')
+    lines.push('---')
+    lines.push('')
+    lines.push('*Generated by QMS MediaSense Integration*')
+    return lines.join('\n')
+  }
+
+  const handleCopySupportRequest = async () => {
+    try {
+      await navigator.clipboard.writeText(buildSupportRequestText())
+      setSupportRequestCopied(true)
+      setTimeout(() => setSupportRequestCopied(false), 2000)
+    } catch {
+      // fallback ignored
+    }
+  }
+
+  const handleDownloadSupportRequest = () => {
+    const blob = new Blob([buildSupportRequestText()], { type: 'text/markdown' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `mediasense-support-request-${new Date().toISOString().slice(0, 10)}.md`
+    a.click()
+    URL.revokeObjectURL(a.href)
   }
 
   const getLogLevelColor = (level: string) => {
@@ -387,6 +506,14 @@ export default function MediaSenseSettings() {
           startIcon={diagnosticsLoading ? <CircularProgress size={20} /> : <BuildIcon />}
         >
           {t('mediaSense.syncDiagnostics', 'Sync diagnostics')}
+        </Button>
+        <Button
+          variant="outlined"
+          color="secondary"
+          onClick={() => setSupportRequestDialogOpen(true)}
+          startIcon={<ContactSupportIcon />}
+        >
+          {t('mediaSense.createSupportRequest', 'Create support request')}
         </Button>
       </Box>
 
@@ -650,6 +777,49 @@ export default function MediaSenseSettings() {
           <Button onClick={() => setClearDialogOpen(false)}>{t('common.cancel')}</Button>
           <Button onClick={handleClearLogs} color="error" variant="contained">
             {t('mediaSense.clearLogs', 'Clear Logs')}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Support Request Dialog */}
+      <Dialog
+        open={supportRequestDialogOpen}
+        onClose={() => setSupportRequestDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>{t('mediaSense.supportRequestTitle', 'Cisco MediaSense Support Request')}</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            {t('mediaSense.supportRequestHint', 'Copy or download the document to send to Cisco Support')}
+          </DialogContentText>
+          <Paper
+            component="pre"
+            sx={{
+              p: 2,
+              maxHeight: 400,
+              overflow: 'auto',
+              fontFamily: 'monospace',
+              fontSize: 12,
+              bgcolor: '#f5f5f5',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+            }}
+          >
+            {buildSupportRequestText()}
+          </Paper>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSupportRequestDialogOpen(false)}>{t('common.close')}</Button>
+          <Button onClick={handleDownloadSupportRequest} startIcon={<DownloadIcon />}>
+            {t('mediaSense.supportRequestDownload', 'Download .md')}
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleCopySupportRequest}
+            startIcon={<ContentCopyIcon />}
+          >
+            {supportRequestCopied ? t('mediaSense.supportRequestCopied', 'Copied!') : t('mediaSense.supportRequestCopy', 'Copy')}
           </Button>
         </DialogActions>
       </Dialog>
