@@ -141,6 +141,44 @@ export class RecordingsSearchService {
   }
 
   /**
+   * Enrich items with agent/team names when denormalized fields are null
+   */
+  private async enrichAgentAndTeamNames(
+    items: RecordingSearchResult[],
+  ): Promise<RecordingSearchResult[]> {
+    const needAgent = items.filter((i) => !i.agentName && i.agentId);
+    const needTeam = items.filter((i) => !i.teamName && i.teamCode);
+    if (needAgent.length === 0 && needTeam.length === 0) return items;
+
+    const agentIds = [...new Set(needAgent.map((i) => i.agentId!))];
+    const teamCodes = [...new Set(needTeam.map((i) => i.teamCode!))];
+
+    const [agents, teams] = await Promise.all([
+      agentIds.length > 0
+        ? this.prisma.agent.findMany({
+            where: { id: { in: agentIds } },
+            select: { id: true, fullName: true },
+          })
+        : [],
+      teamCodes.length > 0
+        ? this.prisma.team.findMany({
+            where: { teamCode: { in: teamCodes } },
+            select: { teamCode: true, displayName: true },
+          })
+        : [],
+    ]);
+
+    const agentMap = new Map(agents.map((a) => [a.id, a.fullName]));
+    const teamMap = new Map(teams.map((t) => [t.teamCode, t.displayName]));
+
+    return items.map((item) => ({
+      ...item,
+      agentName: item.agentName || (item.agentId ? agentMap.get(item.agentId) : undefined),
+      teamName: item.teamName || (item.teamCode ? teamMap.get(item.teamCode) : undefined),
+    }));
+  }
+
+  /**
    * Apply role-based access control to search filters
    */
   private applyAccessControl(filters: SearchFilters, access: AccessControl): SearchFilters {
@@ -354,7 +392,7 @@ export class RecordingsSearchService {
     });
 
     // Map results
-    const items: RecordingSearchResult[] = result.hits.map((hit: any) => ({
+    let items: RecordingSearchResult[] = result.hits.map((hit: any) => ({
       id: hit._source.id || hit._id,
       mediasenseSessionId: hit._source.mediasenseSessionId,
       startTime: new Date(hit._source.startTime),
@@ -375,6 +413,9 @@ export class RecordingsSearchService {
       tags: hit._source.tags,
       score: hit._score,
     }));
+
+    // Resolve agent/team names when denormalized fields are null (agentId/teamCode may be set)
+    items = await this.enrichAgentAndTeamNames(items);
 
     // Map facets
     const facets = this.mapFacets(result.aggregations);
@@ -509,7 +550,7 @@ export class RecordingsSearchService {
       orderBy.startTime = 'desc';
     }
 
-    // Execute queries
+    // Execute queries - include agent/team to resolve names when denormalized fields are null
     const [items, total] = await Promise.all([
       this.prisma.recording.findMany({
         where,
@@ -534,6 +575,8 @@ export class RecordingsSearchService {
           wrapUpReason: true,
           hasAudio: true,
           callId: true,
+          agent: { select: { fullName: true } },
+          team: { select: { displayName: true } },
           tags: {
             select: { tagName: true },
           },
@@ -549,10 +592,12 @@ export class RecordingsSearchService {
     const facets = await this.getPostgresFacets(where);
 
     return {
-      items: items.map(item => ({
+      items: items.map(({ agent, team, tags, evaluation, ...item }) => ({
         ...item,
-        tags: item.tags.map(t => t.tagName),
-        hasEvaluation: Boolean(item.evaluation),
+        agentName: item.agentName || agent?.fullName,
+        teamName: item.teamName || team?.displayName,
+        tags: tags.map(t => t.tagName),
+        hasEvaluation: Boolean(evaluation),
       })),
       total,
       page,

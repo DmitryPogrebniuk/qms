@@ -200,7 +200,7 @@ export const RecordingsResultsTable: React.FC<RecordingsResultsTableProps> = ({
       case 'agentName':
         return (
           <Typography variant="body2" noWrap sx={{ maxWidth: 150 }}>
-            {recording.agentName || recording.agentId || '-'}
+            {recording.agentName || (recording.agentId && recording.agentId.length < 20 ? recording.agentId : null) || '-'}
           </Typography>
         );
 

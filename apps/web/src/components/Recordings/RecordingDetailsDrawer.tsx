@@ -460,7 +460,7 @@ export const RecordingDetailsDrawer: React.FC<RecordingDetailsDrawerProps> = ({
               <ListItemIcon><PersonIcon /></ListItemIcon>
               <ListItemText
                 primary={t('recordings.agent', 'Agent')}
-                secondary={recording.agentName || recording.agentId || '-'}
+                secondary={recording.agentName || (recording.agentId && recording.agentId.length < 20 ? recording.agentId : null) || '-'}
               />
             </ListItem>
             <ListItem>

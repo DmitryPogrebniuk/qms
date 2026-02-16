@@ -48,6 +48,8 @@ export class RecordingsService {
 
     return {
       ...recording,
+      agentName: recording.agentName || recording.agent?.fullName,
+      teamName: recording.teamName || recording.team?.displayName,
       // Denormalized fields
       formattedDuration: this.formatDuration(recording.durationSeconds),
       formattedStartTime: recording.startTime.toISOString(),
