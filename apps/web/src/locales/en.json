@@ -359,5 +359,22 @@
       "level": "Level",
       "noLogs": "No logs to display"
     }
+  },
+  "about": {
+    "title": "Help",
+    "userInstructions": "User Instructions",
+    "searchTitle": "Search Recordings",
+    "searchDesc": "Use filters by date, agent, team, ANI/DNIS to search for calls.",
+    "playbackTitle": "Playback",
+    "playbackDesc": "Click on a recording to open details and play audio. Seeking is supported.",
+    "downloadTitle": "Download",
+    "downloadDesc": "File is saved as IGTAS_date_time_DNIS_ANI.mp3",
+    "evaluationsTitle": "Evaluations",
+    "evaluationsDesc": "Create call evaluations, add notes and tags.",
+    "developerSection": "About Developer",
+    "authors": "Authors",
+    "version": "Version",
+    "linesOfCode": "Lines of generated code",
+    "iterations": "Number of iterations"
   }
 }

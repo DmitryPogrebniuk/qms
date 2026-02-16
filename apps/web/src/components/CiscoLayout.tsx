@@ -21,6 +21,7 @@ import SettingsIcon from '@mui/icons-material/Settings'
 import ScheduleIcon from '@mui/icons-material/Schedule'
 import SchoolIcon from '@mui/icons-material/School'
 import PersonIcon from '@mui/icons-material/Person'
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
 import LanguageSwitcher from './LanguageSwitcher'
 import { useHttpClient } from '@/hooks/useHttpClient'
 
@@ -120,7 +121,9 @@ export default function CiscoLayout() {
     { icon: <ScheduleIcon />, label: t('ciscoNav.schedules', 'Schedules') },
   ] : []
 
-  const allNavItems = [...mainNavItems, ...adminNavItems].filter(item => item.path)
+  const helpNavItem = { icon: <HelpOutlineIcon />, label: t('about.title', 'Довідка'), path: '/about' }
+
+  const allNavItems = [...mainNavItems, ...adminNavItems, helpNavItem].filter(item => item.path)
 
   const handleLogout = () => {
     localStorage.removeItem('jwt_token')

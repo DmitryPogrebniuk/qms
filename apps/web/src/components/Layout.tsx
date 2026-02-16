@@ -43,6 +43,8 @@ export default function Layout() {
     { label: t('nav.maintenance', '🔧 Обслуговування'), path: '/admin/maintenance' },
   ] : []
 
+  const helpItem = { label: t('about.title', 'Довідка'), path: '/about' }
+
   const handleLogout = () => {
     localStorage.removeItem('jwt_token')
     navigate('/login')
@@ -90,6 +92,17 @@ export default function Layout() {
                 </ListItemButton>
               </ListItem>
             ))}
+            <Divider sx={{ my: 1 }} />
+            <ListItem disablePadding>
+              <ListItemButton
+                onClick={() => {
+                  navigate(helpItem.path)
+                  setDrawerOpen(false)
+                }}
+              >
+                <ListItemText primary={helpItem.label} />
+              </ListItemButton>
+            </ListItem>
             {adminItems.length > 0 && (
               <>
                 <Divider sx={{ my: 1 }} />

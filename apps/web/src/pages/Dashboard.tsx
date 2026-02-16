@@ -1,10 +1,12 @@
 import { Typography, Paper, Grid, Box, Button } from '@mui/material'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import { useThemeMode } from '@/contexts/ThemeContext'
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
 
 export default function Dashboard() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const { themeMode } = useThemeMode()
 
   // CUIC-style Dashboard
@@ -45,6 +47,7 @@ export default function Dashboard() {
           <Button
             variant="contained"
             startIcon={<HelpOutlineIcon />}
+            onClick={() => navigate('/about')}
             sx={{
               backgroundColor: '#049FD9',
               color: '#FFFFFF',
