@@ -81,7 +81,8 @@ model Team {
 
 model Agent {
   id String @id @default(cuid())
-  agentId String @unique @db.VarChar(100) // AD login == UCCX agentId
+  agentId String @unique @db.VarChar(100) // AD login == UCCX userId
+  extension String? @db.VarChar(50) // Internal phone number for mapping recordings
   fullName String @db.VarChar(255)
   email String? @db.VarChar(255)
   activeFlag Boolean @default(true)
@@ -100,6 +101,21 @@ model Agent {
   dailyStats DailyAgentStats[]
 
   @@index([agentId])
+  @@index([extension])
+}
+
+model ContactServiceQueue {
+  id String @id @default(cuid())
+  csqId String @unique @db.VarChar(100) // UCCX instance ID
+  name String @db.VarChar(255)
+  mediaType String? @db.VarChar(50) // VOICE, CHAT, EMAIL
+  description String?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lastSyncedAt DateTime?
+
+  @@index([csqId])
 }
 
 model AgentTeam {

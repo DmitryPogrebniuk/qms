@@ -717,7 +717,10 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
           wrapUpReason: raw.wrapUpReason || raw.wrapUp?.reason,
           wrapUpCode: raw.wrapUpCode || raw.wrapUp?.code,
           dispositionCode: raw.dispositionCode || raw.disposition,
-          extension: raw.extension || raw.agentExtension,
+          extension:
+            raw.extension ||
+            raw.agentExtension ||
+            this.getExtensionFromParticipants(raw.tracks || raw.participants),
           contactId: raw.contactId || raw.contact?.id || 
                      raw.tracks?.[0]?.participants?.[0]?.xRefCi ||
                      raw.tracks?.[1]?.participants?.[0]?.xRefCi, // Check both tracks
@@ -745,6 +748,21 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
         return null;
       }
     }).filter(Boolean);
+  }
+
+  /** Extract agent extension from participants (deviceRef when short number) */
+  private getExtensionFromParticipants(tracksOrParticipants?: any[]): string | undefined {
+    if (!Array.isArray(tracksOrParticipants)) return undefined;
+    const participants = tracksOrParticipants.flatMap((t) =>
+      Array.isArray(t?.participants) ? t.participants : Array.isArray(t) ? t : [],
+    );
+    for (const p of participants) {
+      const ref = p?.deviceRef || p?.phoneNumber || p?.number || p?.dn;
+      if (ref && /^\d{4,6}$/.test(String(ref).replace(/\D/g, ''))) {
+        return String(ref).trim();
+      }
+    }
+    return undefined;
   }
 
   private normalizeDirection(direction?: string): string {
@@ -861,14 +879,30 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
       select: { id: true, updatedAt: true, endTime: true },
     });
 
+    // Resolve agent: by agentId, then by extension (internal phone number)
+    let resolvedAgentId = session.agentId ? await this.resolveAgentId(session.agentId) : null;
+    let resolvedTeamCode = session.teamId || null;
+    let resolvedAgentName = session.agentName;
+    let resolvedTeamName = session.teamName;
+
+    if (!resolvedAgentId && session.extension) {
+      const agentByExt = await this.resolveAgentByExtension(session.extension);
+      if (agentByExt) {
+        resolvedAgentId = agentByExt.id;
+        resolvedAgentName = agentByExt.fullName;
+        resolvedTeamCode = agentByExt.teamCode;
+        resolvedTeamName = agentByExt.teamName;
+      }
+    }
+
     // Prepare recording data
     const recordingData = {
       mediasenseSessionId: session.sessionId,
       mediasenseRecordingId: session.recordingId,
-      agentId: session.agentId ? await this.resolveAgentId(session.agentId) : null,
-      teamCode: session.teamId || null,
-      agentName: session.agentName,
-      teamName: session.teamName,
+      agentId: resolvedAgentId,
+      teamCode: resolvedTeamCode,
+      agentName: resolvedAgentName,
+      teamName: resolvedTeamName,
       startTime: new Date(session.startTime),
       endTime: session.endTime ? new Date(session.endTime) : null,
       durationSeconds: Math.round(
@@ -978,17 +1012,44 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async resolveAgentId(agentIdOrName: string): Promise<string | null> {
-    // Try to find agent in our DB
     const agent = await this.prisma.agent.findFirst({
       where: {
         OR: [
           { agentId: agentIdOrName },
+          { extension: agentIdOrName },
           { fullName: { contains: agentIdOrName, mode: 'insensitive' } },
         ],
       },
       select: { id: true },
     });
     return agent?.id || null;
+  }
+
+  /** Resolve agent by extension (internal phone number) - returns agent + team for recording */
+  private async resolveAgentByExtension(extension: string): Promise<{
+    id: string;
+    fullName: string;
+    teamCode: string | null;
+    teamName: string | null;
+  } | null> {
+    const ext = String(extension || '').trim();
+    if (!ext) return null;
+
+    const agent = await this.prisma.agent.findFirst({
+      where: { extension: ext },
+      include: {
+        teams: { include: { team: true }, take: 1 },
+      },
+    });
+    if (!agent) return null;
+
+    const team = agent.teams[0]?.team;
+    return {
+      id: agent.id,
+      fullName: agent.fullName,
+      teamCode: team?.teamCode ?? null,
+      teamName: team?.displayName ?? null,
+    };
   }
 
   private async processParticipants(

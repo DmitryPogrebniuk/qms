@@ -280,6 +280,12 @@
     "keycloakClientSecret": "Секрет клієнта",
     "keycloakNote": "Зміна параметрів Keycloak вимагає перезавантаження програми"
   },
+  "uccx": {
+    "syncNow": "Синхронізувати",
+    "syncing": "Синхронізація...",
+    "syncSuccess": "Синхронізація UCCX завершена",
+    "syncFailed": "Помилка синхронізації"
+  },
   "mediaSense": {
     "testConnection": "Тест з'єднання",
     "testFailed": "Тест з'єднання не вдався",

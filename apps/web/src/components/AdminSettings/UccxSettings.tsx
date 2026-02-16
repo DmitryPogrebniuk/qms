@@ -11,6 +11,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useState, useEffect } from 'react'
 import { useHttpClient } from '@/hooks/useHttpClient'
+import SyncIcon from '@mui/icons-material/Sync'
 
 interface UccxConfig {
   host: string
@@ -25,20 +26,29 @@ export default function UccxSettings() {
   const client = useHttpClient()
   const [config, setConfig] = useState<UccxConfig>({
     host: '',
-    port: 8080,
+    port: 8443,
     username: '',
     password: '',
     enabled: false,
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   useEffect(() => {
     const loadSettings = async () => {
       try {
         const response = await client.get('/integrations/uccx')
-        setConfig(response.data)
+        const data = response.data
+        const settings = data?.settings || data
+        setConfig({
+          host: settings.host || '',
+          port: settings.port ?? 8443,
+          username: settings.username || '',
+          password: settings.password || '',
+          enabled: data?.enabled ?? false,
+        })
       } catch (error) {
         console.error('Failed to load UCCX settings:', error)
       } finally {
@@ -59,13 +69,37 @@ export default function UccxSettings() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      await client.put('/integrations/uccx', config)
+      await client.put('/integrations/uccx', {
+        host: config.host,
+        port: config.port,
+        username: config.username,
+        password: config.password,
+        enabled: config.enabled,
+      })
       setMessage({ type: 'success', text: t('admin.settingsSaved') })
       setTimeout(() => setMessage(null), 5000)
     } catch (error) {
       setMessage({ type: 'error', text: t('admin.settingsFailed') })
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleSync = async () => {
+    setSyncing(true)
+    setMessage(null)
+    try {
+      const res = await client.post('/integrations/uccx/sync')
+      if (res.data?.success) {
+        setMessage({ type: 'success', text: t('uccx.syncSuccess', 'UCCX sync completed') })
+      } else {
+        setMessage({ type: 'error', text: res.data?.message || t('uccx.syncFailed', 'Sync failed') })
+      }
+      setTimeout(() => setMessage(null), 5000)
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err.response?.data?.message || t('uccx.syncFailed', 'Sync failed') })
+    } finally {
+      setSyncing(false)
     }
   }
 
@@ -135,7 +169,7 @@ export default function UccxSettings() {
         </Grid>
       </Grid>
 
-      <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
+      <Box sx={{ mt: 3, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
         <Button
           variant="contained"
           onClick={handleSave}
@@ -145,11 +179,20 @@ export default function UccxSettings() {
           {saving ? <CircularProgress size={24} /> : t('admin.save')}
         </Button>
         <Button
+          variant="contained"
+          color="secondary"
+          onClick={handleSync}
+          disabled={syncing || !config.host}
+          startIcon={syncing ? <CircularProgress size={20} /> : <SyncIcon />}
+        >
+          {syncing ? t('uccx.syncing', 'Syncing...') : t('uccx.syncNow', 'Sync now')}
+        </Button>
+        <Button
           variant="outlined"
           onClick={() => {
             setConfig({
               host: '',
-              port: 8080,
+              port: 8443,
               username: '',
               password: '',
               enabled: false,

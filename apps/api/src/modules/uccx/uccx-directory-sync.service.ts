@@ -5,21 +5,54 @@ import { PrismaService } from '@/common/prisma/prisma.service';
 import { Cron } from '@nestjs/schedule';
 import https from 'https';
 
+/**
+ * UCCX Directory Sync Service
+ *
+ * Syncs agents, teams, and contact service queues (CSQ) from Cisco UCCX 15
+ * using the Configuration API (adminapi).
+ *
+ * Reference: https://developer.cisco.com/docs/contact-center-express/configuration-api-overview/
+ *
+ * - Resource (agents): GET /adminapi/resource
+ * - Team: GET /adminapi/team
+ * - CSQ (queues): GET /adminapi/csq
+ *
+ * Mapping identifier for recordings: extension (internal phone number)
+ */
+
 interface UCCXNode {
   host: string;
   port: number;
   url: string;
 }
 
-/**
- * Syncs teams, agents, skills from UCCX 15 as source of truth
- * Supports High Availability (HA) with automatic failover
- */
+interface UCCXResource {
+  userID?: string;
+  userId?: string;
+  firstName?: string;
+  lastName?: string;
+  extension?: string;
+  team?: { name?: string; refURL?: string };
+  refURL?: string;
+}
+
+interface UCCXTeam {
+  name?: string;
+  teamCode?: string;
+  refURL?: string;
+}
+
+interface UCCXCsq {
+  name?: string;
+  refURL?: string;
+  mediaType?: string;
+}
+
 @Injectable()
 export class UCCXDirectorySyncService {
   private readonly logger = new Logger('UCCXDirectorySyncService');
-  private readonly httpsAgent = new https.Agent({ rejectUnauthorized: false }); // For self-signed certs
-  private readonly uccxNodes: UCCXNode[];
+  private readonly httpsAgent = new https.Agent({ rejectUnauthorized: false });
+  private uccxNodes: UCCXNode[] = [];
   private currentNodeIndex = 0;
 
   constructor(
@@ -27,25 +60,29 @@ export class UCCXDirectorySyncService {
     private readonly httpService: HttpService,
     private readonly prisma: PrismaService,
   ) {
-    this.uccxNodes = this.parseUCCXNodes();
-    this.logger.log(`Initialized with ${this.uccxNodes.length} UCCX node(s): ${this.uccxNodes.map(n => n.url).join(', ')}`);
+    this.initNodes();
   }
 
-  /**
-   * Parse UCCX_NODES environment variable into node list
-   * Supports formats: host1:port1,host2:port2 or host1,host2 (uses default port 8443)
-   */
+  private initNodes(): void {
+    this.uccxNodes = this.parseUCCXNodes();
+    if (this.uccxNodes.length > 0) {
+      this.logger.log(`UCCX nodes: ${this.uccxNodes.map((n) => n.url).join(', ')}`);
+    }
+  }
+
   private parseUCCXNodes(): UCCXNode[] {
-    const nodesConfig = this.configService.get<string>('UCCX_NODES');
+    // Prefer IntegrationSetting (DB)
+    const nodesConfig =
+      this.configService.get<string>('UCCX_NODES') ||
+      this.configService.get<string>('UCCX_HOST');
     if (!nodesConfig) {
-      throw new Error('UCCX_NODES configuration is required');
+      return [];
     }
 
-    return nodesConfig.split(',').map(node => {
+    return nodesConfig.split(',').map((node) => {
       const trimmed = node.trim();
       const [host, portStr] = trimmed.includes(':') ? trimmed.split(':') : [trimmed, '8443'];
       const port = parseInt(portStr, 10);
-      
       return {
         host,
         port,
@@ -54,11 +91,28 @@ export class UCCXDirectorySyncService {
     });
   }
 
+  private getAuth(): { username: string; password: string } {
+    if (this.syncAuthOverride) return this.syncAuthOverride;
+    return {
+      username: this.configService.get<string>('UCCX_USERNAME') || '',
+      password: this.configService.get<string>('UCCX_PASSWORD') || '',
+    };
+  }
+
   /**
-   * Full sync (nightly)
+   * Full sync: teams, agents (resources), CSQs
+   * Cron: every 4 hours
    */
-  @Cron('0 2 * * *') // 2 AM daily
+  @Cron('0 */4 * * *') // Every 4 hours at minute 0
   async syncFull(): Promise<void> {
+    if (this.uccxNodes.length === 0) {
+      this.initNodes();
+    }
+    if (this.uccxNodes.length === 0) {
+      this.logger.debug('UCCX not configured, skipping sync');
+      return;
+    }
+
     this.logger.log('Starting full UCCX directory sync...');
     try {
       await this.prisma.syncState.upsert({
@@ -67,10 +121,10 @@ export class UCCXDirectorySyncService {
         create: { syncType: 'uccx_full', status: 'IN_PROGRESS' },
       });
 
-      await this._syncTeams();
-      await this._syncAgents();
-      await this._syncSkills();
-      await this._syncAgentSkills();
+      await this.syncTeams();
+      await this.syncResources();
+      await this.syncCsqs();
+      await this.backfillRecordingsByExtension();
 
       await this.prisma.syncState.update({
         where: { syncType: 'uccx_full' },
@@ -91,247 +145,294 @@ export class UCCXDirectorySyncService {
           errorMessage: error instanceof Error ? error.message : 'Unknown error',
         },
       });
+      throw error;
     }
   }
 
   /**
-   * Incremental sync (every 10 minutes)
+   * Manual sync trigger (from UI)
+   * @param config Optional config from IntegrationSetting (host, port, username, password)
    */
-  @Cron('*/10 * * * *')
-  async syncIncremental(): Promise<void> {
-    this.logger.debug('Running incremental UCCX sync...');
+  async syncNow(config?: {
+    host: string;
+    port: number;
+    username: string;
+    password: string;
+  }): Promise<{ success: boolean; message?: string }> {
+    const prevNodes = this.uccxNodes;
+    const prevAuth = this.getAuth();
+
+    if (config?.host && config?.username && config?.password) {
+      this.uccxNodes = [
+        {
+          host: config.host,
+          port: config.port || 8443,
+          url: `https://${config.host}:${config.port || 8443}`,
+        },
+      ];
+      this.syncAuthOverride = { username: config.username, password: config.password };
+    }
+
     try {
-      const syncState = await this.prisma.syncState.findUnique({
-        where: { syncType: 'uccx_incremental' },
+      await this.syncFull();
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Sync failed',
+      };
+    } finally {
+      this.uccxNodes = prevNodes;
+      this.syncAuthOverride = undefined;
+    }
+  }
+
+  private syncAuthOverride?: { username: string; password: string };
+
+  private async syncTeams(): Promise<void> {
+    this.logger.debug('Syncing teams from UCCX adminapi/team...');
+    const items = await this.fetchAdminApi<UCCXTeam>('/adminapi/team');
+    if (!Array.isArray(items)) {
+      this.logger.warn('UCCX team response is not an array');
+      return;
+    }
+
+    for (const t of items) {
+      const teamCode = t.name || t.teamCode || this.extractIdFromRef(t.refURL);
+      if (!teamCode) continue;
+
+      await this.prisma.team.upsert({
+        where: { teamCode },
+        update: {
+          displayName: teamCode,
+          lastSyncedAt: new Date(),
+        },
+        create: {
+          teamCode,
+          displayName: teamCode,
+          lastSyncedAt: new Date(),
+        },
+      });
+    }
+    this.logger.debug(`Synced ${items.length} teams`);
+  }
+
+  private async syncResources(): Promise<void> {
+    this.logger.debug('Syncing agents (resources) from UCCX adminapi/resource...');
+    const items = await this.fetchAdminApi<UCCXResource>('/adminapi/resource');
+    if (!Array.isArray(items)) {
+      this.logger.warn('UCCX resource response is not an array');
+      return;
+    }
+
+    for (const r of items) {
+      const agentId = r.userID || r.userId || this.extractIdFromRef(r.refURL);
+      if (!agentId) continue;
+
+      const firstName = r.firstName || '';
+      const lastName = r.lastName || '';
+      const fullName = [firstName, lastName].filter(Boolean).join(' ').trim() || agentId;
+      const extension = r.extension ? String(r.extension).trim() : null;
+
+      const teamCode = r.team?.name || (r.team?.refURL ? this.extractIdFromRef(r.team.refURL) : null);
+
+      await this.prisma.agent.upsert({
+        where: { agentId },
+        update: {
+          fullName,
+          extension,
+          lastSyncedAt: new Date(),
+        },
+        create: {
+          agentId,
+          fullName,
+          extension,
+          activeFlag: true,
+          lastSyncedAt: new Date(),
+        },
       });
 
-      // TODO: Implement incremental sync using watermark
-      // For now, skip if recently synced
-      if (syncState?.lastSyncedAt && Date.now() - syncState.lastSyncedAt.getTime() < 600000) {
-        return;
+      if (teamCode) {
+        await this.syncAgentTeamMembership(agentId, [teamCode]);
       }
-
-      await this._syncAgents();
-    } catch (error) {
-      this.logger.error('Incremental UCCX sync error:', error);
     }
+    this.logger.debug(`Synced ${items.length} agents`);
   }
 
-  /**
-   * Sync teams from UCCX
-   */
-  private async _syncTeams(): Promise<void> {
-    this.logger.debug('Syncing teams from UCCX...');
-    try {
-      const uccxTeams = await this._fetchFromUCCX('/teams');
-
-      for (const team of uccxTeams) {
-        await this.prisma.team.upsert({
-          where: { teamCode: team.teamCode },
-          update: {
-            displayName: team.displayName,
-            description: team.description,
-            supervisorIds: team.supervisorIds || [],
-            lastSyncedAt: new Date(),
-          },
-          create: {
-            teamCode: team.teamCode,
-            displayName: team.displayName,
-            description: team.description,
-            supervisorIds: team.supervisorIds || [],
-            lastSyncedAt: new Date(),
-          },
-        });
-      }
-
-      this.logger.debug(`Synced ${uccxTeams.length} teams`);
-    } catch (error) {
-      this.logger.error('Team sync error:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Sync agents from UCCX
-   */
-  private async _syncAgents(): Promise<void> {
-    this.logger.debug('Syncing agents from UCCX...');
-    try {
-      const uccxAgents = await this._fetchFromUCCX('/agents');
-
-      for (const agent of uccxAgents) {
-        await this.prisma.agent.upsert({
-          where: { agentId: agent.agentId },
-          update: {
-            fullName: agent.fullName,
-            email: agent.email,
-            activeFlag: agent.activeFlag,
-            lastSyncedAt: new Date(),
-          },
-          create: {
-            agentId: agent.agentId,
-            fullName: agent.fullName,
-            email: agent.email,
-            activeFlag: agent.activeFlag,
-            lastSyncedAt: new Date(),
-          },
-        });
-
-        // Sync team membership
-        await this._syncAgentTeamMembership(agent.agentId, agent.teamCodes || []);
-      }
-
-      this.logger.debug(`Synced ${uccxAgents.length} agents`);
-    } catch (error) {
-      this.logger.error('Agent sync error:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Sync agent team membership
-   */
-  private async _syncAgentTeamMembership(agentId: string, teamCodes: string[]): Promise<void> {
+  private async syncAgentTeamMembership(agentId: string, teamCodes: string[]): Promise<void> {
     const agent = await this.prisma.agent.findUnique({ where: { agentId } });
     if (!agent) return;
 
-    // Remove old team memberships
     await this.prisma.agentTeam.deleteMany({
       where: { agentId: agent.id },
     });
 
-    // Add new team memberships
-    for (const teamCode of teamCodes) {
-      const team = await this.prisma.team.findUnique({ where: { teamCode } });
+    for (const code of teamCodes) {
+      const team = await this.prisma.team.findUnique({ where: { teamCode: code } });
       if (team) {
-        await this.prisma.agentTeam.create({
-          data: {
-            agentId: agent.id,
-            teamId: team.id,
-          },
+        await this.prisma.agentTeam.upsert({
+          where: { agentId_teamId: { agentId: agent.id, teamId: team.id } },
+          update: {},
+          create: { agentId: agent.id, teamId: team.id },
         });
       }
     }
   }
 
-  /**
-   * Sync skills from UCCX
-   */
-  private async _syncSkills(): Promise<void> {
-    this.logger.debug('Syncing skills from UCCX...');
-    try {
-      const uccxSkills = await this._fetchFromUCCX('/skills');
-
-      for (const skill of uccxSkills) {
-        await this.prisma.skill.upsert({
-          where: { skillId: skill.skillId },
-          update: {
-            skillName: skill.skillName,
-            description: skill.description,
-            updatedAt: new Date(),
-          },
-          create: {
-            skillId: skill.skillId,
-            skillName: skill.skillName,
-            description: skill.description,
-          },
-        });
-      }
-
-      this.logger.debug(`Synced ${uccxSkills.length} skills`);
-    } catch (error) {
-      this.logger.error('Skill sync error:', error);
-      throw error;
+  private async syncCsqs(): Promise<void> {
+    this.logger.debug('Syncing CSQs from UCCX adminapi/csq...');
+    const items = await this.fetchAdminApi<UCCXCsq>('/adminapi/csq?detail=full');
+    if (!Array.isArray(items)) {
+      this.logger.warn('UCCX csq response is not an array');
+      return;
     }
+
+    for (const c of items) {
+      const csqId = c.name || this.extractIdFromRef(c.refURL);
+      if (!csqId) continue;
+
+      await this.prisma.contactServiceQueue.upsert({
+        where: { csqId },
+        update: {
+          name: c.name || csqId,
+          mediaType: c.mediaType || null,
+          lastSyncedAt: new Date(),
+        },
+        create: {
+          csqId,
+          name: c.name || csqId,
+          mediaType: c.mediaType || null,
+          lastSyncedAt: new Date(),
+        },
+      });
+    }
+    this.logger.debug(`Synced ${items.length} CSQs`);
+  }
+
+  private extractIdFromRef(ref?: string): string | null {
+    if (!ref || typeof ref !== 'string') return null;
+    const parts = ref.split('/');
+    return parts[parts.length - 1] || null;
   }
 
   /**
-   * Sync agent skills
+   * Fetch from UCCX adminapi. Handles both array and object-with-items responses.
    */
-  private async _syncAgentSkills(): Promise<void> {
-    this.logger.debug('Syncing agent skills from UCCX...');
-    try {
-      const agentSkills = await this._fetchFromUCCX('/agent-skills');
-
-      for (const as of agentSkills) {
-        const agent = await this.prisma.agent.findUnique({ where: { agentId: as.agentId } });
-        const skill = await this.prisma.skill.findUnique({ where: { skillId: as.skillId } });
-
-        if (agent && skill) {
-          await this.prisma.agentSkill.upsert({
-            where: { agentId_skillId: { agentId: agent.id, skillId: skill.id } },
-            update: {
-              proficiency: as.proficiency,
-              updatedAt: new Date(),
-            },
-            create: {
-              agentId: agent.id,
-              skillId: skill.id,
-              proficiency: as.proficiency,
-            },
-          });
-        }
-      }
-    } catch (error) {
-      this.logger.error('Agent skill sync error:', error);
+  private async fetchAdminApi<T>(path: string): Promise<T[]> {
+    const { username, password } = this.getAuth();
+    if (!username || !password) {
+      throw new Error('UCCX_USERNAME and UCCX_PASSWORD required');
     }
-  }
 
-  /**
-   * Make authenticated request to UCCX with HA failover
-   * Tries all configured nodes in round-robin fashion with automatic failover
-   */
-  private async _fetchFromUCCX(endpoint: string): Promise<any[]> {
-    const username = this.configService.get<string>('UCCX_USERNAME');
-    const password = this.configService.get<string>('UCCX_PASSWORD');
+    const auth = Buffer.from(`${username}:${password}`).toString('base64');
     const timeout = this.configService.get<number>('UCCX_TIMEOUT_MS', 30000);
     const maxRetries = this.configService.get<number>('UCCX_RETRY_ATTEMPTS', 2);
 
-    const auth = Buffer.from(`${username}:${password}`).toString('base64');
-
-    // Try all nodes in sequence
     for (let attempt = 0; attempt < this.uccxNodes.length * maxRetries; attempt++) {
       const node = this.uccxNodes[this.currentNodeIndex];
-      const url = `${node.url}${endpoint}`;
+      const url = `${node.url}${path}`;
 
       try {
-        this.logger.debug(`Attempting UCCX request to ${node.url}${endpoint} (attempt ${attempt + 1})`);
-        
+        this.logger.debug(`UCCX request: ${url}`);
         const response = await this.httpService.axiosRef.get(url, {
           headers: {
             Authorization: `Basic ${auth}`,
+            Accept: 'application/json',
           },
           httpsAgent: this.httpsAgent,
           timeout,
         });
 
-        // Success - keep this node for next request
-        this.logger.debug(`Successfully fetched from UCCX node: ${node.host}`);
-        return response.data || [];
-
+        const data = response.data;
+        if (Array.isArray(data)) return data as T[];
+        if (data && Array.isArray(data.resource)) return data.resource as T[];
+        if (data && Array.isArray(data.team)) return data.team as T[];
+        if (data && Array.isArray(data.csq)) return data.csq as T[];
+        if (data && Array.isArray(data.resources)) return data.resources as T[];
+        if (data && Array.isArray(data.teams)) return data.teams as T[];
+        if (data && Array.isArray(data.contactServiceQueues)) return data.contactServiceQueues as T[];
+        if (data && typeof data === 'object' && !Array.isArray(data)) {
+          const keys = Object.keys(data);
+          const arrKey = keys.find((k) => Array.isArray((data as any)[k]));
+          if (arrKey) return (data as any)[arrKey] as T[];
+        }
+        return [];
       } catch (error) {
         this.logger.warn(
-          `UCCX node ${node.host} failed for ${endpoint}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          `UCCX node ${node.host} failed: ${error instanceof Error ? error.message : 'Unknown'}`,
         );
-
-        // Try next node
         this.currentNodeIndex = (this.currentNodeIndex + 1) % this.uccxNodes.length;
-
-        // If this was the last attempt, throw error
-        if (attempt === (this.uccxNodes.length * maxRetries) - 1) {
-          this.logger.error(`All UCCX nodes failed for ${endpoint} after ${attempt + 1} attempts`);
-          throw new Error(`UCCX HA cluster unavailable: All ${this.uccxNodes.length} nodes failed`);
+        if (attempt === this.uccxNodes.length * maxRetries - 1) {
+          throw new Error(`UCCX unavailable: all nodes failed`);
         }
-
-        // Wait before retry (exponential backoff)
         await this.sleep(Math.min(1000 * Math.pow(2, attempt), 10000));
       }
     }
+    return [];
+  }
 
-    throw new Error('UCCX request failed');
+  /**
+   * Backfill existing recordings with agent name and team using extension mapping
+   */
+  private async backfillRecordingsByExtension(): Promise<void> {
+    const recordings = await this.prisma.recording.findMany({
+      where: {
+        OR: [
+          { agentName: null },
+          { teamName: null },
+          { agentId: null },
+          { teamCode: null },
+        ],
+        extension: { not: null },
+      },
+      select: {
+        id: true,
+        extension: true,
+        agentId: true,
+        teamCode: true,
+        agentName: true,
+        teamName: true,
+      },
+    });
+
+    let updated = 0;
+    for (const rec of recordings) {
+      const ext = rec.extension?.trim();
+      if (!ext) continue;
+
+      const agent = await this.prisma.agent.findFirst({
+        where: { extension: ext },
+        include: {
+          teams: {
+            include: { team: true },
+            take: 1,
+          },
+        },
+      });
+
+      if (!agent) continue;
+
+      const team = agent.teams[0]?.team;
+      const teamCode = team?.teamCode ?? null;
+      const teamName = team?.displayName ?? null;
+
+      await this.prisma.recording.update({
+        where: { id: rec.id },
+        data: {
+          agentId: agent.id,
+          agentName: agent.fullName,
+          teamCode,
+          teamName,
+        },
+      });
+      updated++;
+    }
+    if (updated > 0) {
+      this.logger.log(`Backfilled ${updated} recordings with agent/team by extension`);
+    }
   }
 
   private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((r) => setTimeout(r, ms));
   }
 }

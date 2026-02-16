@@ -4,9 +4,10 @@ import { IntegrationsService } from './integrations.service';
 import { IntegrationsController } from './integrations.controller';
 import { PrismaModule } from '@/common/prisma/prisma.module';
 import { AuthModule } from '@/modules/auth/auth.module';
+import { UccxModule } from '@/modules/uccx/uccx.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, ConfigModule],
+  imports: [PrismaModule, AuthModule, ConfigModule, UccxModule],
   providers: [IntegrationsService],
   controllers: [IntegrationsController],
   exports: [IntegrationsService],

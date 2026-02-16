@@ -276,6 +276,12 @@
     "keycloakClientSecret": "Client Secret",
     "keycloakNote": "Changing Keycloak settings requires application restart"
   },
+  "uccx": {
+    "syncNow": "Sync now",
+    "syncing": "Syncing...",
+    "syncSuccess": "UCCX sync completed",
+    "syncFailed": "Sync failed"
+  },
   "mediaSense": {
     "testConnection": "Test Connection",
     "testFailed": "Connection test failed",
