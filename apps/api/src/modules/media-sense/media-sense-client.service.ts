@@ -1437,11 +1437,14 @@ export class MediaSenseClientService {
       ? fullUrl
       : `${fullUrl}${fullUrl.includes('?') ? '&' : '?'}timeout=30`;
 
+    // Stream requests need longer timeout than API calls (10s default) - MediaSense can be slow to respond
+    const streamTimeoutMs = 120000; // 2 min for start + transfer
     const response = await this.axiosInstance.request({
       method: 'GET',
       url: urlWithTimeout,
       responseType: 'stream',
       headers,
+      timeout: streamTimeoutMs,
       validateStatus: () => true,
     });
 
