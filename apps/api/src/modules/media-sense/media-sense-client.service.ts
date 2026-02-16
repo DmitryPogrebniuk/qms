@@ -1630,9 +1630,19 @@ export class MediaSenseClientService {
 
   private truncateData(data: any, maxLength: number): string {
     if (!data) return '';
-    const str = typeof data === 'string' ? data : JSON.stringify(data);
-    if (str.length <= maxLength) return str;
-    return str.substring(0, maxLength) + '...[truncated]';
+    if (typeof data === 'string') {
+      return data.length <= maxLength ? data : data.substring(0, maxLength) + '...[truncated]';
+    }
+    // Streams/Buffers have circular refs (TLSSocket, HTTPParser) - do not JSON.stringify
+    if (typeof data?.pipe === 'function' || data instanceof Buffer || data?.readable !== undefined) {
+      return '[Stream/Binary]';
+    }
+    try {
+      const str = JSON.stringify(data);
+      return str.length <= maxLength ? str : str.substring(0, maxLength) + '...[truncated]';
+    } catch {
+      return '[Circular/Non-serializable]';
+    }
   }
 
   private sleep(ms: number): Promise<void> {
