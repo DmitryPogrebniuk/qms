@@ -7,9 +7,10 @@ import { ExportService } from './export.service';
 import { RecordingsController } from './recordings.controller';
 import { MediaSenseModule } from '../media-sense/media-sense.module';
 import { OpenSearchModule } from '../opensearch/opensearch.module';
+import { IntegrationsModule } from '../integrations/integrations.module';
 
 @Module({
-  imports: [PrismaModule, MediaSenseModule, OpenSearchModule],
+  imports: [PrismaModule, MediaSenseModule, OpenSearchModule, IntegrationsModule],
   providers: [
     RecordingsService,
     RecordingsSearchService,

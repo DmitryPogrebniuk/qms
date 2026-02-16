@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/common/prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import { MediaSenseClientService } from '../media-sense/media-sense-client.service';
+import { IntegrationsService } from '../integrations/integrations.service';
 import { Readable } from 'stream';
 
 /**
@@ -36,6 +37,7 @@ export class RecordingsStreamService {
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
     private readonly mediaSenseClient: MediaSenseClientService,
+    private readonly integrationsService: IntegrationsService,
   ) {}
 
   /**
@@ -271,7 +273,28 @@ export class RecordingsStreamService {
     return types[format.toLowerCase()] || 'audio/octet-stream';
   }
 
+  /**
+   * Get MediaSense config from IntegrationSetting (DB/UI) or env vars.
+   * Must match sync service source so stream/download use same credentials as sync.
+   */
   private async ensureClientConfigured(): Promise<void> {
+    // 1) Prefer IntegrationSetting (DB) - same source as sync, supports UI configuration
+    const integration = await this.integrationsService.getIntegration('mediasense');
+    if (integration?.enabled && integration?.configured && integration.settings) {
+      const { apiUrl, apiKey, apiSecret, allowSelfSigned } = integration.settings as Record<string, any>;
+      if (apiUrl && apiKey && apiSecret) {
+        this.mediaSenseClient.configure({
+          baseUrl: apiUrl,
+          apiKey,
+          apiSecret,
+          allowSelfSigned: allowSelfSigned === true || allowSelfSigned === 'true',
+          manualJSessionId: process.env.MEDIASENSE_JSESSIONID,
+        });
+        return;
+      }
+    }
+
+    // 2) Fallback to env vars
     let baseUrl = this.configService.get<string>('MEDIASENSE_API_URL');
     let apiKey = this.configService.get<string>('MEDIASENSE_API_KEY');
     let apiSecret = this.configService.get<string>('MEDIASENSE_API_SECRET');
@@ -285,7 +308,9 @@ export class RecordingsStreamService {
     const allowSelfSigned = this.configService.get<boolean>('MEDIASENSE_ALLOW_SELF_SIGNED');
 
     if (!baseUrl || !apiKey || !apiSecret) {
-      throw new Error('MediaSense not configured (set MEDIASENSE_HOST/MEDIASENSE_USERNAME/MEDIASENSE_PASSWORD or MEDIASENSE_API_URL/API_KEY/API_SECRET)');
+      throw new Error(
+        'MediaSense not configured. Set in Settings → Integrations → MediaSense, or env: MEDIASENSE_HOST/MEDIASENSE_USERNAME/MEDIASENSE_PASSWORD',
+      );
     }
 
     this.mediaSenseClient.configure({
@@ -293,6 +318,7 @@ export class RecordingsStreamService {
       apiKey,
       apiSecret,
       allowSelfSigned,
+      manualJSessionId: process.env.MEDIASENSE_JSESSIONID,
     });
   }
 }
