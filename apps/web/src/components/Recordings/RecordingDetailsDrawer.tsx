@@ -138,16 +138,33 @@ export const RecordingDetailsDrawer: React.FC<RecordingDetailsDrawerProps> = ({
 
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('durationchange', handleDurationChange);
+    audio.addEventListener('loadedmetadata', handleDurationChange);
     audio.addEventListener('ended', handleEnded);
     audio.addEventListener('error', handleError);
 
     return () => {
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('durationchange', handleDurationChange);
+      audio.removeEventListener('loadedmetadata', handleDurationChange);
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('error', handleError);
     };
   }, [recording, t]);
+
+  // Polling fallback: timeupdate can fire rarely with streaming (Range requests)
+  useEffect(() => {
+    if (!isPlaying) return;
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const interval = setInterval(() => {
+      if (audio.paused) return;
+      const t = audio.currentTime;
+      if (!Number.isNaN(t)) setCurrentTime(t);
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [isPlaying]);
 
   const handlePlayPause = () => {
     const audio = audioRef.current;
@@ -308,8 +325,8 @@ export const RecordingDetailsDrawer: React.FC<RecordingDetailsDrawerProps> = ({
           {/* Progress Slider */}
           <Box sx={{ mb: 1 }}>
             <Slider
-              value={currentTime}
-              max={duration || recording.durationSeconds || 100}
+              value={Number.isFinite(currentTime) ? currentTime : 0}
+              max={Math.max(1, duration || recording.durationSeconds || 100)}
               onChange={handleSeek}
               sx={{ py: 1 }}
             />
