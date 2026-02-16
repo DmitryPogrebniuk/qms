@@ -189,13 +189,21 @@ export class RecordingsService {
     }
 
     if (userRole === 'SUPERVISOR') {
-      // Check if recording is in supervisor's teams
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
         select: { teamCodes: true },
       });
 
-      if (user?.teamCodes?.includes(recording.teamCode)) {
+      const teamCodes = user?.teamCodes ?? [];
+      // Supervisor without assigned teams: full access (until admin assigns teams)
+      if (teamCodes.length === 0) {
+        return;
+      }
+      // Recording without teamCode: allow (legacy data)
+      if (!recording.teamCode) {
+        return;
+      }
+      if (teamCodes.includes(recording.teamCode)) {
         return;
       }
       throw new ForbiddenException('Access denied - not your team');
