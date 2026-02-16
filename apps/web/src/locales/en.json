@@ -376,5 +376,32 @@
     "version": "Version",
     "linesOfCode": "Lines of generated code",
     "iterations": "Number of iterations"
+  },
+  "audit": {
+    "title": "Audit Trail",
+    "subtitle": "Event log (read-only, no modifications allowed)",
+    "dateFrom": "Date from",
+    "dateTo": "Date to",
+    "action": "Action",
+    "user": "User",
+    "role": "Role",
+    "resource": "Resource",
+    "ip": "IP",
+    "metadata": "Metadata",
+    "timestamp": "Time",
+    "loadError": "Failed to load audit log",
+    "actionLogin": "Login",
+    "actionSearch": "Search",
+    "actionRecordView": "Record view",
+    "actionPlaybackStart": "Playback",
+    "actionPlaybackPause": "Pause",
+    "actionPlaybackSeek": "Seek",
+    "actionPlaybackComplete": "Playback complete",
+    "actionRecordDownload": "Download",
+    "actionEvaluationCreated": "Evaluation created",
+    "actionCoachingCreated": "Coaching created",
+    "actionEvaluationSubmitted": "Evaluation submitted",
+    "actionDisputeFiled": "Dispute filed",
+    "actionAuditView": "Audit view"
   }
 }

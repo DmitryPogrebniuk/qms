@@ -41,6 +41,7 @@ export default function Layout() {
   const adminItems = userRole === 'ADMIN' ? [
     { label: t('nav.adminSettings'), path: '/admin/settings' },
     { label: t('nav.maintenance', '🔧 Обслуговування'), path: '/admin/maintenance' },
+    { label: t('audit.title', 'Аудиторський слід'), path: '/admin/audit' },
   ] : []
 
   const helpItem = { label: t('about.title', 'Довідка'), path: '/about' }

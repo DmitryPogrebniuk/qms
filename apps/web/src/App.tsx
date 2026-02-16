@@ -12,6 +12,7 @@ import Coaching from '@/pages/Coaching'
 import AdminSettings from '@/pages/AdminSettings'
 import Maintenance from '@/pages/Maintenance'
 import About from '@/pages/About'
+import AuditLog from '@/pages/AuditLog'
 import { ThemeContextProvider, useThemeMode } from '@/contexts/ThemeContext'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -51,6 +52,7 @@ function AppContent() {
           <Route path="coaching" element={<Coaching />} />
           <Route path="admin/settings" element={<AdminSettings />} />
           <Route path="admin/maintenance" element={<Maintenance />} />
+          <Route path="admin/audit" element={<AuditLog />} />
           <Route path="about" element={<About />} />
         </Route>
       </Routes>

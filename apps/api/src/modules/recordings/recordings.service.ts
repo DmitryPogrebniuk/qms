@@ -98,21 +98,81 @@ export class RecordingsService {
   }
 
   /**
-   * Log playback event for audit
+   * Log audit event (immutable compliance trail)
    */
-  async logPlaybackEvent(recordingId: string, userId: string): Promise<void> {
+  async logAuditEvent(params: {
+    userId: string;
+    action: AuditAction;
+    resourceId?: string;
+    metadata?: Record<string, unknown>;
+    ipAddress?: string;
+  }): Promise<void> {
     const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: params.userId },
       select: { role: true },
     });
-
     await this.prisma.auditLog.create({
       data: {
-        userId,
+        userId: params.userId,
         userRole: user?.role || 'USER',
-        action: AuditAction.PLAYBACK_START,
-        resourceId: recordingId,
+        action: params.action,
+        resourceId: params.resourceId,
+        filters: params.metadata ? (params.metadata as object) : undefined,
+        ipAddress: params.ipAddress,
       },
+    });
+  }
+
+  /**
+   * Log playback event for audit
+   */
+  async logPlaybackEvent(
+    recordingId: string,
+    userId: string,
+    opts?: { event?: string; position?: number; ipAddress?: string },
+  ): Promise<void> {
+    const actionMap: Record<string, AuditAction> = {
+      play: AuditAction.PLAYBACK_START,
+      pause: AuditAction.PLAYBACK_PAUSE,
+      seek: AuditAction.PLAYBACK_SEEK,
+      complete: AuditAction.PLAYBACK_COMPLETE,
+    };
+    const action = actionMap[opts?.event || 'play'] ?? AuditAction.PLAYBACK_START;
+    await this.logAuditEvent({
+      userId,
+      action,
+      resourceId: recordingId,
+      metadata: opts?.position != null ? { position: opts.position } : undefined,
+      ipAddress: opts?.ipAddress,
+    });
+  }
+
+  /**
+   * Log record view (opening details)
+   */
+  async logRecordView(recordingId: string, userId: string, ipAddress?: string): Promise<void> {
+    await this.logAuditEvent({
+      userId,
+      action: AuditAction.RECORD_VIEW,
+      resourceId: recordingId,
+      ipAddress,
+    });
+  }
+
+  /**
+   * Log record download
+   */
+  async logRecordDownload(
+    recordingId: string,
+    userId: string,
+    opts?: { format?: string; ipAddress?: string },
+  ): Promise<void> {
+    await this.logAuditEvent({
+      userId,
+      action: AuditAction.RECORD_DOWNLOAD,
+      resourceId: recordingId,
+      metadata: opts?.format ? { format: opts.format } : undefined,
+      ipAddress: opts?.ipAddress,
     });
   }
 

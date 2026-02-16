@@ -380,5 +380,32 @@
     "version": "Версія",
     "linesOfCode": "Рядків згенерованого коду",
     "iterations": "Кількість ітерацій"
+  },
+  "audit": {
+    "title": "Аудиторський слід",
+    "subtitle": "Журнал подій (тільки перегляд, зміни не дозволені)",
+    "dateFrom": "Дата з",
+    "dateTo": "Дата до",
+    "action": "Дія",
+    "user": "Користувач",
+    "role": "Роль",
+    "resource": "Ресурс",
+    "ip": "IP",
+    "metadata": "Метадані",
+    "timestamp": "Час",
+    "loadError": "Не вдалося завантажити журнал",
+    "actionLogin": "Вхід",
+    "actionSearch": "Пошук",
+    "actionRecordView": "Перегляд запису",
+    "actionPlaybackStart": "Відтворення",
+    "actionPlaybackPause": "Пауза",
+    "actionPlaybackSeek": "Перемотування",
+    "actionPlaybackComplete": "Завершено прослуховування",
+    "actionRecordDownload": "Скачування",
+    "actionEvaluationCreated": "Створено оцінку",
+    "actionCoachingCreated": "Створено коучинг",
+    "actionEvaluationSubmitted": "Створено оцінку",
+    "actionDisputeFiled": "Оскарження",
+    "actionAuditView": "Перегляд журналу"
   }
 }

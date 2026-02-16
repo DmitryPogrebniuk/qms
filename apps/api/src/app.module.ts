@@ -16,6 +16,7 @@ import { OpenSearchModule } from './modules/opensearch/opensearch.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { MaintenanceModule } from './modules/maintenance/maintenance.module';
 import { HealthModule } from './modules/health/health.module';
+import { AuditModule } from './modules/audit/audit.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RbacGuard } from './common/guards/rbac.guard';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -55,6 +56,7 @@ import { configValidationSchema } from './config/config.schema';
     IntegrationsModule,
     MaintenanceModule,
     HealthModule,
+    AuditModule,
   ],
   providers: [
     {

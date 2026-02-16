@@ -27,6 +27,15 @@ import { Roles } from '@/common/decorators/roles.decorator';
 // import { Role } from '@prisma/client';
 import { Role } from '@/types/shared';
 
+function getClientIp(req: any): string | undefined {
+  const forwarded = req.headers?.['x-forwarded-for'];
+  if (forwarded) {
+    const first = typeof forwarded === 'string' ? forwarded.split(',')[0] : forwarded[0];
+    return first?.trim();
+  }
+  return req.ip || req.connection?.remoteAddress;
+}
+
 @ApiTags('Recordings')
 @ApiBearerAuth()
 @Controller('recordings')
@@ -141,6 +150,8 @@ export class RecordingsController {
       throw new NotFoundException('Recording not found');
     }
 
+    await this.recordingsService.logRecordView(id, req.user.sub || req.user.id, getClientIp(req));
+
     // Check audio availability
     const audioStatus = await this.streamService.checkAudioAvailability(id);
 
@@ -176,8 +187,10 @@ export class RecordingsController {
       throw new ForbiddenException('Access denied to this recording');
     }
 
-    // Log audit event
-    await this.recordingsService.logPlaybackEvent(id, req.user.sub || req.user.id);
+    await this.recordingsService.logPlaybackEvent(id, req.user.sub || req.user.id, {
+      event: 'play',
+      ipAddress: getClientIp(req),
+    });
 
     let streamResult;
     try {
@@ -255,6 +268,10 @@ export class RecordingsController {
     );
 
     if (downloadResult.status === 'ready') {
+      await this.recordingsService.logRecordDownload(id, req.user.sub || req.user.id, {
+        format: downloadResult.actualFormat || format,
+        ipAddress: getClientIp(req),
+      });
       // File is ready - stream it (actualFormat when fallback to WAV without ffmpeg)
       const outFormat = downloadResult.actualFormat || format;
       const filename = this.buildFilename(recording, outFormat);
@@ -392,6 +409,11 @@ export class RecordingsController {
     const filename = recording
       ? this.buildFilename(recording, job.format)
       : `IGTAS_unknown_${job.recordingId}.${job.format}`;
+
+    await this.recordingsService.logRecordDownload(job.recordingId, job.requestedBy, {
+      format: job.format,
+      ipAddress: getClientIp(req),
+    });
     
     res.setHeader('Content-Type', downloadResult.contentType!);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -420,7 +442,11 @@ export class RecordingsController {
       req.user.roles?.[0] || req.user.role || 'USER',
     );
     if (!hasAccess) throw new ForbiddenException('Access denied');
-    await this.recordingsService.logPlaybackEvent(id, req.user.sub || req.user.id);
+    await this.recordingsService.logPlaybackEvent(id, req.user.sub || req.user.id, {
+      event: body.event,
+      position: body.position,
+      ipAddress: getClientIp(req),
+    });
     return { ok: true };
   }
 

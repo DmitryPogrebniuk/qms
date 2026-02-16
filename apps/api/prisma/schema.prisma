@@ -718,10 +718,15 @@ enum AuditAction {
   SEARCH
   RECORD_VIEW
   PLAYBACK_START
+  PLAYBACK_PAUSE
+  PLAYBACK_SEEK
+  PLAYBACK_COMPLETE
+  RECORD_DOWNLOAD
   EVALUATION_CREATED
   COACHING_CREATED
   EVALUATION_SUBMITTED
   DISPUTE_FILED
+  AUDIT_VIEW
 }
 
 // ============================================================================

@@ -22,6 +22,7 @@ import ScheduleIcon from '@mui/icons-material/Schedule'
 import SchoolIcon from '@mui/icons-material/School'
 import PersonIcon from '@mui/icons-material/Person'
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
+import SecurityIcon from '@mui/icons-material/Security'
 import LanguageSwitcher from './LanguageSwitcher'
 import { useHttpClient } from '@/hooks/useHttpClient'
 
@@ -119,6 +120,7 @@ export default function CiscoLayout() {
   const adminNavItems = userRole === 'ADMIN' ? [
     { icon: <SettingsIcon />, label: t('nav.adminSettings'), path: '/admin/settings' },
     { icon: <ScheduleIcon />, label: t('ciscoNav.schedules', 'Schedules') },
+    { icon: <SecurityIcon />, label: t('audit.title', 'Аудиторський слід'), path: '/admin/audit' },
   ] : []
 
   const helpNavItem = { icon: <HelpOutlineIcon />, label: t('about.title', 'Довідка'), path: '/about' }
