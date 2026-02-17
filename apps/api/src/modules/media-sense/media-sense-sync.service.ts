@@ -1102,6 +1102,14 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
     dbData: any,
   ): Promise<void> {
     try {
+      const mediaSenseTags = session.tags ? Object.keys(session.tags) : [];
+      const dbTags = await this.prisma.recordingTag.findMany({
+        where: { recordingId },
+        select: { tagName: true },
+      });
+      const dbTagNames = dbTags.map((t) => t.tagName);
+      const tags = [...new Set([...mediaSenseTags, ...dbTagNames])];
+
       await this.openSearchService.indexRecording({
         id: recordingId,
         mediasenseSessionId: session.sessionId,
@@ -1123,7 +1131,7 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
         wrapUpReason: session.wrapUpReason,
         callId: session.callId,
         hasAudio: dbData.hasAudio,
-        tags: session.tags ? Object.keys(session.tags) : [],
+        tags,
         searchText: dbData.searchVector,
       });
     } catch (error) {

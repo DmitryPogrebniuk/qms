@@ -125,7 +125,11 @@ export class RecordingsSearchService {
 
     let response: SearchResponse;
 
-    if (this.useOpenSearch) {
+    // When filtering by tags, use Postgres (OpenSearch index may lack user-added tags from RecordingTag)
+    const usePostgresForTags =
+      rbacFilters.tags && rbacFilters.tags.length > 0;
+
+    if (this.useOpenSearch && !usePostgresForTags) {
       try {
         response = await this.searchOpenSearch(rbacFilters, request.sort, request.page, request.pageSize);
       } catch (error) {
@@ -176,6 +180,34 @@ export class RecordingsSearchService {
       agentName: item.agentName || (item.agentId ? agentMap.get(item.agentId) : undefined),
       teamName: item.teamName || (item.teamCode ? teamMap.get(item.teamCode) : undefined),
     }));
+  }
+
+  /**
+   * Enrich search items with tags from RecordingTag (for OpenSearch results - index may lack user-added tags)
+   */
+  private async enrichItemsWithTags(
+    items: RecordingSearchResult[],
+  ): Promise<RecordingSearchResult[]> {
+    if (items.length === 0) return items;
+
+    const recordingIds = items.map((i) => i.id);
+    const tagsByRecording = await this.prisma.recordingTag.findMany({
+      where: { recordingId: { in: recordingIds } },
+      select: { recordingId: true, tagName: true },
+    });
+
+    const tagMap = new Map<string, string[]>();
+    for (const t of tagsByRecording) {
+      const arr = tagMap.get(t.recordingId) || [];
+      arr.push(t.tagName);
+      tagMap.set(t.recordingId, arr);
+    }
+
+    return items.map((item) => {
+      const dbTags = tagMap.get(item.id) || [];
+      const merged = [...new Set([...(item.tags || []), ...dbTags])];
+      return { ...item, tags: merged };
+    });
   }
 
   /**
@@ -410,12 +442,15 @@ export class RecordingsSearchService {
       wrapUpReason: hit._source.wrapUpReason,
       hasAudio: hit._source.hasAudio,
       callId: hit._source.callId,
-      tags: hit._source.tags,
+      tags: hit._source.tags || [],
       score: hit._score,
     }));
 
     // Resolve agent/team names when denormalized fields are null (agentId/teamCode may be set)
     items = await this.enrichAgentAndTeamNames(items);
+
+    // Enrich with tags from RecordingTag (OpenSearch may have stale/empty tags for user-added tags)
+    items = await this.enrichItemsWithTags(items);
 
     // Map facets
     const facets = this.mapFacets(result.aggregations);

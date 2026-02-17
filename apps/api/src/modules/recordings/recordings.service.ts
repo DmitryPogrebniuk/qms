@@ -1,6 +1,7 @@
 import { Injectable, Logger, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/common/prisma/prisma.service';
 import { MediaSenseSyncService } from '../media-sense/media-sense-sync.service';
+import { OpenSearchService } from '../opensearch/opensearch.service';
 import { AuditAction } from '@prisma/client';
 
 @Injectable()
@@ -10,6 +11,7 @@ export class RecordingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly syncService: MediaSenseSyncService,
+    private readonly openSearchService: OpenSearchService,
   ) {}
 
   /**
@@ -180,7 +182,7 @@ export class RecordingsService {
    * Add tag to recording
    */
   async addTag(recordingId: string, tagName: string, tagValue: string | undefined, userId: string) {
-    return this.prisma.recordingTag.upsert({
+    const tag = await this.prisma.recordingTag.upsert({
       where: {
         recordingId_tagName: { recordingId, tagName },
       },
@@ -194,6 +196,31 @@ export class RecordingsService {
       update: {
         tagValue,
       },
+    });
+
+    // Re-index in OpenSearch so tag filter and display work
+    this.reindexRecordingForTags(recordingId).catch((err) =>
+      this.logger.warn(`Failed to re-index recording ${recordingId} for tags`, { error: err?.message }),
+    );
+
+    return tag;
+  }
+
+  /**
+   * Re-index recording in OpenSearch with current tags from DB (for search/filter)
+   */
+  private async reindexRecordingForTags(recordingId: string): Promise<void> {
+    const recording = await this.prisma.recording.findUnique({
+      where: { id: recordingId },
+      include: { tags: { select: { tagName: true } } },
+    });
+    if (!recording) return;
+
+    const tagNames = recording.tags.map((t) => t.tagName);
+    await this.openSearchService.indexRecording({
+      ...recording,
+      tags: tagNames,
+      searchText: (recording as any).searchVector,
     });
   }
 
