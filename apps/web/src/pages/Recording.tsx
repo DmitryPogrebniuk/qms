@@ -14,7 +14,7 @@ import {
   CircularProgress,
   Alert,
   List,
-  ListItem,
+  ListItemButton,
   ListItemText,
 } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
@@ -140,16 +140,15 @@ export default function Recording() {
           {evaluations.length > 0 && (
             <List>
               {evaluations.map((ev) => (
-                <ListItem
+                <ListItemButton
                   key={ev.id}
-                  button
                   onClick={() => navigate(`/evaluations/${ev.id}`)}
                 >
                   <ListItemText
                     primary={ev.scorecard?.name || ev.scorecardTemplate?.name}
                     secondary={`${ev.finalScore ?? ev.totalScore ?? 0}% - ${ev.status} - ${new Date(ev.createdAt).toLocaleDateString()}`}
                   />
-                </ListItem>
+                </ListItemButton>
               ))}
             </List>
           )}

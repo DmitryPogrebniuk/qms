@@ -25,7 +25,6 @@ import {
 import {
   Add as AddIcon,
   Delete as DeleteIcon,
-  DragIndicator as DragIcon,
   ExpandMore as ExpandMoreIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
@@ -34,9 +33,9 @@ import {
   getScorecard,
   createScorecard,
   updateScorecard,
-  type Scorecard,
   type ScorecardSection,
   type ScorecardQuestion,
+  type ScorecardPayload,
 } from '../services/evaluationsApi';
 
 const QUESTION_TYPES = [
@@ -141,7 +140,7 @@ export default function ScorecardEdit() {
     setSaving(true);
     setError(null);
     try {
-      const payload = {
+      const payload: ScorecardPayload = {
         name: name.trim(),
         description: description.trim() || undefined,
         sections: sections.map((s, si) => ({

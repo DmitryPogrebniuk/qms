@@ -15,7 +15,6 @@ import {
   RadioGroup,
   Slider,
   FormControl,
-  InputLabel,
   Select,
   MenuItem,
   Chip,

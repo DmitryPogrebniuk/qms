@@ -5,7 +5,7 @@
 import { httpClient } from '../hooks/useHttpClient';
 
 export interface ScorecardQuestion {
-  id: string;
+  id?: string;
   text: string;
   type: 'YES_NO' | 'SCALE' | 'TEXT' | 'DROPDOWN' | 'CRITICAL';
   weight: number;
@@ -15,7 +15,7 @@ export interface ScorecardQuestion {
 }
 
 export interface ScorecardSection {
-  id: string;
+  id?: string;
   name: string;
   weight: number;
   order: number;
@@ -31,6 +31,14 @@ export interface Scorecard {
   creator?: { id: string; fullName?: string };
 }
 
+/** Payload for create/update - id optional for new sections/questions */
+export interface ScorecardPayload {
+  name?: string;
+  description?: string;
+  isActive?: boolean;
+  sections?: Array<{ id?: string; name: string; weight?: number; order?: number; questions?: ScorecardQuestion[] }>;
+}
+
 export interface EvaluationAnswer {
   id?: string;
   questionId: string;
@@ -43,7 +51,7 @@ export interface Evaluation {
   id: string;
   recordingId?: string;
   scorecardId?: string;
-  scorecard?: { id: string; name: string };
+  scorecard?: { id: string; name: string; sections?: ScorecardSection[] };
   scorecardTemplate?: { id: string; name: string };
   status: string;
   finalScore?: number;
@@ -68,12 +76,12 @@ export async function getScorecard(id: string): Promise<Scorecard> {
   return res.data;
 }
 
-export async function createScorecard(data: Partial<Scorecard>): Promise<Scorecard> {
+export async function createScorecard(data: ScorecardPayload): Promise<Scorecard> {
   const res = await httpClient.post<Scorecard>('/scorecards', data);
   return res.data;
 }
 
-export async function updateScorecard(id: string, data: Partial<Scorecard>): Promise<Scorecard> {
+export async function updateScorecard(id: string, data: ScorecardPayload): Promise<Scorecard> {
   const res = await httpClient.put<Scorecard>(`/scorecards/${id}`, data);
   return res.data;
 }
