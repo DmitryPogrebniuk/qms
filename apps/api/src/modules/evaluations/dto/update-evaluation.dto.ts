@@ -1,12 +1,11 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsArray, ValidateNested } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsArray, ValidateNested, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
-import { CreateEvaluationAnswerDto } from './create-evaluation.dto';
 
 export class UpdateEvaluationAnswerDto {
-  @ApiPropertyOptional()
-  @IsOptional()
-  questionId?: string;
+  @ApiProperty()
+  @IsString()
+  questionId: string;
 
   @ApiPropertyOptional()
   @IsOptional()
