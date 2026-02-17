@@ -23,6 +23,7 @@ import { RecordingsService } from './recordings.service';
 import { RecordingsSearchService, SearchRequest, AccessControl } from './recordings-search.service';
 import { RecordingsStreamService } from './recordings-stream.service';
 import { ExportService } from './export.service';
+import { EvaluationsService } from '../evaluations/evaluations.service';
 import { Roles } from '@/common/decorators/roles.decorator';
 // import { Role } from '@prisma/client';
 import { Role } from '@/types/shared';
@@ -47,6 +48,7 @@ export class RecordingsController {
     private readonly searchService: RecordingsSearchService,
     private readonly streamService: RecordingsStreamService,
     private readonly exportService: ExportService,
+    private readonly evaluationsService: EvaluationsService,
   ) {}
 
   /**
@@ -131,6 +133,22 @@ export class RecordingsController {
     };
 
     return this.searchService.getFilterOptions(field, accessControl, search);
+  }
+
+  /**
+   * Get evaluations for a recording
+   */
+  @Get(':id/evaluations')
+  @ApiOperation({ summary: 'Get evaluations for recording' })
+  @ApiParam({ name: 'id', description: 'Recording ID' })
+  async getRecordingEvaluations(@Param('id') id: string, @Request() req: any) {
+    const access = {
+      userId: req.user.sub || req.user.id,
+      role: req.user.role || req.user.roles?.[0] || 'USER',
+      agentId: req.user.agentId,
+      teamCodes: req.user.teamCodes ?? [],
+    };
+    return this.evaluationsService.getRecordingEvaluations(id, access);
   }
 
   /**

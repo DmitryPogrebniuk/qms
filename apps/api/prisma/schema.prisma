@@ -39,6 +39,7 @@ model User {
   auditLogs AuditLog[]
   supervisedTeams Team[]
   sessions Session[]
+  scorecardsCreated Scorecard[]
 
   @@index([keycloakId])
   @@index([agentId])
@@ -447,7 +448,7 @@ model ScorecardTemplate {
   version Int @default(1)
   description String?
   
-  sections Json // Array of ScorecardSection
+  sections Json // Array of ScorecardSection (legacy)
   isActive Boolean @default(true)
   
   createdAt DateTime @default(now())
@@ -460,6 +461,71 @@ model ScorecardTemplate {
   @@index([createdAt])
 }
 
+// Enterprise Scorecard Builder (Cisco QM / NICE / Genesys style)
+model Scorecard {
+  id String @id @default(cuid())
+  name String @db.VarChar(255)
+  description String? @db.Text
+  isActive Boolean @default(true)
+  createdBy String
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  creator User @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  sections ScorecardSection[]
+  evaluations Evaluation[]
+
+  @@index([isActive])
+  @@index([createdBy])
+}
+
+model ScorecardSection {
+  id String @id @default(cuid())
+  scorecardId String
+  name String @db.VarChar(255)
+  weight Float @default(1)
+  order Int @default(0)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  scorecard Scorecard @relation(fields: [scorecardId], references: [id], onDelete: Cascade)
+  questions ScorecardQuestion[]
+
+  @@index([scorecardId])
+}
+
+enum QuestionType {
+  YES_NO
+  SCALE
+  TEXT
+  DROPDOWN
+  CRITICAL
+}
+
+model ScorecardQuestion {
+  id String @id @default(cuid())
+  sectionId String
+  text String @db.Text
+  type QuestionType @default(TEXT)
+  weight Float @default(1)
+  isCritical Boolean @default(false)
+  options Json? // For DROPDOWN: ["opt1","opt2"]; for SCALE: {min:1,max:5}
+  order Int @default(0)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  section ScorecardSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  answers EvaluationAnswer[]
+
+  @@index([sectionId])
+}
+
 model Evaluation {
   id String @id @default(cuid())
   
@@ -467,7 +533,8 @@ model Evaluation {
   recordingId String? @unique
   chatId String? @unique
   
-  scorecardTemplateId String
+  scorecardTemplateId String? // Legacy
+  scorecardId String? // New enterprise scorecard
   
   evaluatorId String
   agentId String
@@ -475,8 +542,9 @@ model Evaluation {
   
   status EvaluationStatus @default(DRAFT)
   
-  responses Json // Array of EvaluationResponse
-  totalScore Float?
+  responses Json? // Legacy: Array of EvaluationResponse
+  totalScore Float? // Legacy
+  finalScore Float? // New: calculated from EvaluationAnswer
   comments String?
   
   createdAt DateTime @default(now())
@@ -487,19 +555,22 @@ model Evaluation {
   // Relations
   recording Recording? @relation(fields: [recordingId], references: [id], onDelete: SetNull)
   chat Chat? @relation(fields: [chatId], references: [id], onDelete: SetNull)
-  scorecard ScorecardTemplate @relation(fields: [scorecardTemplateId], references: [id], onDelete: Restrict)
+  scorecardTemplate ScorecardTemplate? @relation(fields: [scorecardTemplateId], references: [id], onDelete: Restrict)
+  scorecard Scorecard? @relation(fields: [scorecardId], references: [id], onDelete: Restrict)
   evaluator User @relation(fields: [evaluatorId], references: [id], onDelete: Restrict)
   agent Agent @relation(fields: [agentId], references: [id], onDelete: Restrict)
   team Team @relation(fields: [teamCode], references: [teamCode], onDelete: Restrict)
   bookmarks EvaluationBookmark[]
   disputes Dispute[]
   coachingPlan CoachingPlan?
+  answers EvaluationAnswer[]
 
   @@index([evaluatorId])
   @@index([agentId])
   @@index([teamCode])
   @@index([status])
   @@index([createdAt])
+  @@index([scorecardId])
 }
 
 enum EvaluationStatus {
@@ -508,6 +579,27 @@ enum EvaluationStatus {
   ACKNOWLEDGED
   DISPUTED
   RESOLVED
+  APPROVED
+}
+
+model EvaluationAnswer {
+  id String @id @default(cuid())
+  evaluationId String
+  questionId String
+  value String? @db.Text // YES_NO: "yes"/"no"; SCALE: "1"-"5"; TEXT: free text; DROPDOWN: selected option
+  score Float? // Calculated score for this answer
+  comment String? @db.Text
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  evaluation Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  question ScorecardQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([evaluationId, questionId])
+  @@index([evaluationId])
+  @@index([questionId])
 }
 
 model EvaluationBookmark {

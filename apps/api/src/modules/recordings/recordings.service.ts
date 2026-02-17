@@ -34,8 +34,10 @@ export class RecordingsService {
         },
         evaluation: {
           include: {
+            scorecardTemplate: { select: { id: true, name: true } },
             scorecard: { select: { id: true, name: true } },
             bookmarks: true,
+            answers: { include: { question: true } },
           },
         },
       },

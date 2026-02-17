@@ -9,6 +9,9 @@ import Dashboard from '@/pages/Dashboard'
 import Search from '@/pages/Search'
 import Recording from '@/pages/Recording'
 import Evaluations from '@/pages/Evaluations'
+import EvaluationDetail from '@/pages/EvaluationDetail'
+import Scorecards from '@/pages/Scorecards'
+import ScorecardEdit from '@/pages/ScorecardEdit'
 import Coaching from '@/pages/Coaching'
 import AdminSettings from '@/pages/AdminSettings'
 import Maintenance from '@/pages/Maintenance'
@@ -59,6 +62,10 @@ function AppContent() {
           <Route path="search" element={<Search />} />
           <Route path="recordings/:id" element={<Recording />} />
           <Route path="evaluations" element={<Evaluations />} />
+          <Route path="evaluations/:id" element={<EvaluationDetail />} />
+          <Route path="scorecards" element={<Scorecards />} />
+          <Route path="scorecards/:id/edit" element={<ScorecardEdit />} />
+          <Route path="scorecards/new" element={<ScorecardEdit />} />
           <Route path="coaching" element={<Coaching />} />
           <Route path="admin/settings" element={<AdminSettings />} />
           <Route path="admin/maintenance" element={<Maintenance />} />

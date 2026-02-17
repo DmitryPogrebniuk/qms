@@ -8,6 +8,7 @@ import { UsersModule } from './modules/users/users.module';
 import { RecordingsModule } from './modules/recordings/recordings.module';
 import { ChatsModule } from './modules/chats/chats.module';
 import { EvaluationsModule } from './modules/evaluations/evaluations.module';
+import { ScorecardsModule } from './modules/scorecards/scorecards.module';
 import { CoachingModule } from './modules/coaching/coaching.module';
 import { SamplingModule } from './modules/sampling/sampling.module';
 import { UccxModule } from './modules/uccx/uccx.module';
@@ -48,6 +49,7 @@ import { configValidationSchema } from './config/config.schema';
     RecordingsModule,
     ChatsModule,
     EvaluationsModule,
+    ScorecardsModule,
     CoachingModule,
     SamplingModule,
     UccxModule,

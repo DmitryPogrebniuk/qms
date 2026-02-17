@@ -185,6 +185,37 @@ export class OpenSearchService implements OnModuleInit {
   }
 
   /**
+   * Index evaluation for reporting/analytics
+   */
+  async indexEvaluation(data: {
+    evaluationId: string;
+    recordingId?: string;
+    agentId?: string;
+    score?: number;
+    date: string;
+  }): Promise<void> {
+    if (!this.initialized) return;
+
+    try {
+      const indexName = `${this.indexPrefix}-evaluations`;
+      await this.httpService.axiosRef.post(
+        `${this._getBaseUrl()}/${indexName}/_doc/${data.evaluationId}`,
+        {
+          evaluationId: data.evaluationId,
+          recordingId: data.recordingId,
+          agentId: data.agentId,
+          score: data.score,
+          date: data.date,
+        },
+        { headers: this._getHeaders() },
+      );
+      this.logger.debug(`Indexed evaluation ${data.evaluationId}`);
+    } catch (error: any) {
+      this.logger.warn(`Failed to index evaluation ${data.evaluationId}:`, error.message);
+    }
+  }
+
+  /**
    * Search recordings with aggregations
    */
   async searchWithAggregations(query: OpenSearchQuery): Promise<OpenSearchResult> {

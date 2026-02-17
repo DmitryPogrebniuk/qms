@@ -8,9 +8,10 @@ import { RecordingsController } from './recordings.controller';
 import { MediaSenseModule } from '../media-sense/media-sense.module';
 import { OpenSearchModule } from '../opensearch/opensearch.module';
 import { IntegrationsModule } from '../integrations/integrations.module';
+import { EvaluationsModule } from '../evaluations/evaluations.module';
 
 @Module({
-  imports: [PrismaModule, MediaSenseModule, OpenSearchModule, IntegrationsModule],
+  imports: [PrismaModule, MediaSenseModule, OpenSearchModule, IntegrationsModule, EvaluationsModule],
   providers: [
     RecordingsService,
     RecordingsSearchService,

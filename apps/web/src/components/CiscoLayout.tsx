@@ -113,6 +113,7 @@ export default function CiscoLayout() {
     { icon: <DashboardIcon />, label: t('ciscoNav.reportDashboards', 'Dashboards') },
     { icon: <ArticleIcon />, label: t('nav.search'), path: '/search' },
     { icon: <AssessmentIcon />, label: t('nav.evaluations'), path: '/evaluations' },
+    { icon: <AssessmentIcon />, label: t('nav.scorecards', 'Scorecards'), path: '/scorecards' },
     { icon: <ListAltIcon />, label: t('ciscoNav.valueLists', 'Value Lists') },
     { icon: <SchoolIcon />, label: t('nav.coaching'), path: '/coaching' },
   ]

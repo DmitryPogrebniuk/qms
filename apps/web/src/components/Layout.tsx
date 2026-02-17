@@ -35,6 +35,7 @@ export default function Layout() {
     { label: t('nav.dashboard'), path: '/' },
     { label: t('nav.search'), path: '/search' },
     { label: t('nav.evaluations'), path: '/evaluations' },
+    { label: t('nav.scorecards', 'Scorecards'), path: '/scorecards' },
     { label: t('nav.coaching'), path: '/coaching' },
   ]
 
