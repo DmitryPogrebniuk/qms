@@ -421,7 +421,10 @@ export async function getExportStatus(jobId: string): Promise<ExportJob> {
  * Add tag to recording
  */
 export async function addTag(recordingId: string, name: string, color?: string): Promise<RecordingTag> {
-  const response = await httpClient.post<RecordingTag>(`/recordings/${recordingId}/tags`, { name, color });
+  const response = await httpClient.post<RecordingTag>(`/recordings/${recordingId}/tags`, {
+    tagName: name,
+    tagValue: color,
+  });
   return response.data;
 }
 
@@ -435,8 +438,11 @@ export async function removeTag(recordingId: string, tagId: string): Promise<voi
 /**
  * Add note to recording
  */
-export async function addNote(recordingId: string, text: string): Promise<RecordingNote> {
-  const response = await httpClient.post<RecordingNote>(`/recordings/${recordingId}/notes`, { text });
+export async function addNote(recordingId: string, text: string, timestamp?: number): Promise<RecordingNote> {
+  const response = await httpClient.post<RecordingNote>(`/recordings/${recordingId}/notes`, {
+    noteText: text,
+    timestamp,
+  });
   return response.data;
 }
 
