@@ -552,14 +552,17 @@ export const RecordingDetailsDrawer: React.FC<RecordingDetailsDrawerProps> = ({
             </Button>
           </Box>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-            {recording.tags?.map((tag) => (
-              <Chip
-                key={tag.id}
-                label={tag.name}
-                sx={{ bgcolor: tag.color || undefined }}
-                onDelete={() => {/* TODO: delete tag */}}
-              />
-            ))}
+            {recording.tags?.map((tag, idx) => {
+              const t = typeof tag === 'string' ? { id: `tag-${idx}`, tagName: tag } : tag;
+              return (
+                <Chip
+                  key={t.id}
+                  label={t.tagName || t.name || ''}
+                  sx={{ bgcolor: t.tagValue || t.color || undefined }}
+                  onDelete={() => {/* TODO: delete tag */}}
+                />
+              );
+            })}
             {(!recording.tags || recording.tags.length === 0) && (
               <Typography color="text.secondary">
                 {t('recordings.noTags', 'No tags yet')}
@@ -593,9 +596,9 @@ export const RecordingDetailsDrawer: React.FC<RecordingDetailsDrawerProps> = ({
           <Divider sx={{ my: 2 }} />
           {recording.notes?.map((note) => (
             <Paper key={note.id} sx={{ p: 2, mb: 1 }} variant="outlined">
-              <Typography variant="body2">{note.text}</Typography>
+              <Typography variant="body2">{note.noteText || note.text || ''}</Typography>
               <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                {note.createdBy?.name} • {new Date(note.createdAt).toLocaleString()}
+                {new Date(note.createdAt).toLocaleString()}
               </Typography>
             </Paper>
           ))}

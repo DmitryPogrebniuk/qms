@@ -44,17 +44,21 @@ export interface RecordingParticipant {
 
 export interface RecordingTag {
   id: string;
-  name: string;
-  color?: string;
+  tagName: string;
+  tagValue?: string;
+  name?: string; // alias for tagName (display)
+  color?: string; // alias for tagValue
   createdAt: string;
-  createdBy?: { id: string; name: string };
+  createdBy?: string;
 }
 
 export interface RecordingNote {
   id: string;
-  text: string;
+  noteText: string;
+  text?: string; // alias for noteText (display)
+  timestamp?: number;
   createdAt: string;
-  createdBy?: { id: string; name: string };
+  createdBy?: string;
 }
 
 export interface Recording {
@@ -118,7 +122,7 @@ export interface Recording {
   createdAt: string;
   updatedAt: string;
   participants?: RecordingParticipant[];
-  tags?: RecordingTag[];
+  tags?: (RecordingTag | string)[]; // search returns string[], details return RecordingTag[]
   notes?: RecordingNote[];
   evaluations?: any[];
   _score?: number;

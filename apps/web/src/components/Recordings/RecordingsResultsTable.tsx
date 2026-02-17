@@ -221,18 +221,24 @@ export const RecordingsResultsTable: React.FC<RecordingsResultsTableProps> = ({
       case 'tags':
         return (
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-            {recording.tags?.slice(0, 2).map((tag) => (
-              <Chip
-                key={tag.id}
-                label={tag.name}
-                size="small"
-                sx={{
-                  height: 20,
-                  fontSize: '0.7rem',
-                  bgcolor: tag.color || undefined,
-                }}
-              />
-            ))}
+            {recording.tags?.slice(0, 2).map((tag, idx) => {
+              const isString = typeof tag === 'string';
+              const label = isString ? tag : (tag.tagName || tag.name || '');
+              const key = isString ? `${tag}-${idx}` : tag.id;
+              const color = isString ? undefined : (tag.tagValue || tag.color);
+              return (
+                <Chip
+                  key={key}
+                  label={label}
+                  size="small"
+                  sx={{
+                    height: 20,
+                    fontSize: '0.7rem',
+                    bgcolor: color || undefined,
+                  }}
+                />
+              );
+            })}
             {(recording.tags?.length || 0) > 2 && (
               <Chip
                 label={`+${recording.tags!.length - 2}`}
