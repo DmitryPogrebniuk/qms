@@ -553,7 +553,8 @@ export const RecordingDetailsDrawer: React.FC<RecordingDetailsDrawerProps> = ({
           </Box>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
             {recording.tags?.map((tag, idx) => {
-              const t = typeof tag === 'string' ? { id: `tag-${idx}`, tagName: tag } : tag;
+              const t: { id: string; tagName: string; tagValue?: string; name?: string; color?: string } =
+                typeof tag === 'string' ? { id: `tag-${idx}`, tagName: tag } : tag;
               return (
                 <Chip
                   key={t.id}
