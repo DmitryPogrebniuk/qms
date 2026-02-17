@@ -204,49 +204,46 @@ export interface SyncStatus {
 // ============================================================================
 
 /**
- * Compute dateFrom/dateTo (ISO) from datePreset (API expects dateFrom/dateTo, not datePreset)
+ * Compute dateFrom/dateTo (ISO) from datePreset.
+ * Uses LOCAL timezone so "yesterday" = yesterday in user's timezone (e.g. Kyiv UTC+2).
+ * Fixes mismatch when DB stores UTC and UI shows local time.
  */
 function dateRangeFromPreset(preset: RecordingSearchParams['datePreset']): { dateFrom?: string; dateTo?: string } {
   const now = new Date();
-  const toEndOfDay = (d: Date) => {
-    const x = new Date(d);
-    x.setUTCHours(23, 59, 59, 999);
+  const toEndOfDayLocal = (d: Date) => {
+    const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
     return x.toISOString();
   };
-  const toStartOfDay = (d: Date) => {
-    const x = new Date(d);
-    x.setUTCHours(0, 0, 0, 0);
+  const toStartOfDayLocal = (d: Date) => {
+    const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
     return x.toISOString();
   };
   switch (preset) {
     case 'today':
-      return { dateFrom: toStartOfDay(now), dateTo: toEndOfDay(now) };
+      return { dateFrom: toStartOfDayLocal(now), dateTo: toEndOfDayLocal(now) };
     case 'yesterday': {
       const y = new Date(now);
-      y.setUTCDate(y.getUTCDate() - 1);
-      return { dateFrom: toStartOfDay(y), dateTo: toEndOfDay(y) };
+      y.setDate(y.getDate() - 1);
+      return { dateFrom: toStartOfDayLocal(y), dateTo: toEndOfDayLocal(y) };
     }
     case 'last7days': {
       const from = new Date(now);
-      from.setUTCDate(from.getUTCDate() - 6);
-      return { dateFrom: toStartOfDay(from), dateTo: toEndOfDay(now) };
+      from.setDate(from.getDate() - 6);
+      return { dateFrom: toStartOfDayLocal(from), dateTo: toEndOfDayLocal(now) };
     }
     case 'last30days': {
       const from = new Date(now);
-      from.setUTCDate(from.getUTCDate() - 29);
-      return { dateFrom: toStartOfDay(from), dateTo: toEndOfDay(now) };
+      from.setDate(from.getDate() - 29);
+      return { dateFrom: toStartOfDayLocal(from), dateTo: toEndOfDayLocal(now) };
     }
     case 'thisMonth': {
-      const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-      return { dateFrom: start.toISOString(), dateTo: toEndOfDay(now) };
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { dateFrom: toStartOfDayLocal(start), dateTo: toEndOfDayLocal(now) };
     }
     case 'lastMonth': {
-      const y = now.getUTCMonth() - 1;
-      const year = y < 0 ? now.getUTCFullYear() - 1 : now.getUTCFullYear();
-      const month = y < 0 ? y + 12 : y;
-      const start = new Date(Date.UTC(year, month, 1));
-      const end = new Date(Date.UTC(year, month + 1, 0, 23, 59, 59, 999));
-      return { dateFrom: start.toISOString(), dateTo: end.toISOString() };
+      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      return { dateFrom: toStartOfDayLocal(start), dateTo: end.toISOString() };
     }
     default:
       return {};

@@ -232,9 +232,14 @@ export const RecordingsSearchFilters: React.FC<RecordingsSearchFiltersProps> = (
                 type="date"
                 label={t('common.from', 'From')}
                 value={filters.dateFrom?.split('T')[0] || ''}
-                onChange={(e) =>
-                  onChange({ ...filters, dateFrom: e.target.value ? `${e.target.value}T00:00:00Z` : undefined })
-                }
+                onChange={(e) => {
+                  if (!e.target.value) {
+                    onChange({ ...filters, dateFrom: undefined });
+                    return;
+                  }
+                  const d = new Date(e.target.value + 'T00:00:00');
+                  onChange({ ...filters, dateFrom: d.toISOString() });
+                }}
                 InputLabelProps={{ shrink: true }}
               />
               <TextField
@@ -242,9 +247,14 @@ export const RecordingsSearchFilters: React.FC<RecordingsSearchFiltersProps> = (
                 type="date"
                 label={t('common.to', 'To')}
                 value={filters.dateTo?.split('T')[0] || ''}
-                onChange={(e) =>
-                  onChange({ ...filters, dateTo: e.target.value ? `${e.target.value}T23:59:59Z` : undefined })
-                }
+                onChange={(e) => {
+                  if (!e.target.value) {
+                    onChange({ ...filters, dateTo: undefined });
+                    return;
+                  }
+                  const d = new Date(e.target.value + 'T23:59:59.999');
+                  onChange({ ...filters, dateTo: d.toISOString() });
+                }}
                 InputLabelProps={{ shrink: true }}
               />
             </Box>
