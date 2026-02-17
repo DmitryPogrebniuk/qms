@@ -705,11 +705,16 @@ export class RecordingsSearchService {
   ): Promise<Array<{ value: string; label: string }>> {
     const where: any = { isDeleted: false };
 
-    // Apply access control
-    if (accessControl.role === 'SUPERVISOR' && accessControl.teamCodes) {
+    // Apply access control (ADMIN/QA see all; SUPERVISOR by teams; USER by own agent)
+    if (accessControl.role === 'SUPERVISOR' && accessControl.teamCodes?.length) {
       where.teamCode = { in: accessControl.teamCodes };
-    } else if (accessControl.role === 'USER' && accessControl.agentId) {
-      where.agentId = accessControl.agentId;
+    } else if (accessControl.role === 'USER') {
+      if (accessControl.agentId) {
+        where.agentId = accessControl.agentId;
+      } else {
+        // USER without agentId cannot see any recordings - return empty options
+        return [];
+      }
     }
 
     switch (field) {
@@ -788,6 +793,7 @@ export class RecordingsSearchService {
       case 'tags':
         const tags = await this.prisma.recordingTag.findMany({
           where: {
+            recording: where,
             ...(search && { tagName: { contains: search, mode: 'insensitive' } }),
           },
           select: { tagName: true },

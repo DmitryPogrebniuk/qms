@@ -102,10 +102,10 @@ export class RecordingsController {
     };
 
     const accessControl: AccessControl = {
-      role: req.user.roles?.[0] || req.user.role || 'USER',
+      role: req.user.role || req.user.roles?.[0] || 'USER',
       userId: req.user.sub || req.user.id,
       agentId: req.user.agentId,
-      teamCodes: req.user.teamCodes || [],
+      teamCodes: req.user.teamCodes ?? [],
     };
 
     return this.searchService.search(searchRequest, accessControl);
@@ -124,10 +124,10 @@ export class RecordingsController {
     @Request() req: any,
   ) {
     const accessControl: AccessControl = {
-      role: req.user.roles?.[0] || req.user.role || 'USER',
+      role: req.user.role || req.user.roles?.[0] || 'USER',
       userId: req.user.sub || req.user.id,
       agentId: req.user.agentId,
-      teamCodes: req.user.teamCodes || [],
+      teamCodes: req.user.teamCodes ?? [],
     };
 
     return this.searchService.getFilterOptions(field, accessControl, search);

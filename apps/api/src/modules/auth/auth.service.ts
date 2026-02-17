@@ -120,7 +120,18 @@ export class AuthService {
       });
 
       if (user) {
-        // Update existing user
+        // Update existing user (refresh agentId/teamCodes in case agent was synced from UCCX later)
+        const agent = await this.prisma.agent.findUnique({
+          where: { agentId: keycloakUser.username },
+        });
+        const agentTeams = agent
+          ? await this.prisma.agentTeam.findMany({
+              where: { agentId: agent.id },
+              select: { team: { select: { teamCode: true } } },
+            })
+          : [];
+        const teamCodes = agentTeams.map((at) => at.team.teamCode);
+
         await this.prisma.user.update({
           where: { keycloakId: keycloakUser.keycloakId },
           data: {
@@ -128,6 +139,8 @@ export class AuthService {
             fullName: keycloakUser.fullName,
             role: keycloakUser.roles[0], // Primary role
             isActive: true,
+            agentId: agent?.agentId ?? user.agentId,
+            teamCodes: teamCodes.length ? teamCodes : user.teamCodes,
           },
         });
       } else {
