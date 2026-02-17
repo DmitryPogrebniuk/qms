@@ -203,12 +203,14 @@ export default function EvaluationDetail() {
       <Divider sx={{ my: 3 }} />
 
       {/* Form */}
-      {scorecard?.sections?.map((section) => (
-        <Paper key={section.id} sx={{ p: 2, mb: 2 }}>
+      {scorecard?.sections?.map((section, sIdx) => (
+        <Paper key={section.id ?? `s-${sIdx}`} sx={{ p: 2, mb: 2 }}>
           <Typography variant="h6" sx={{ mb: 2 }}>
             {section.name} (weight: {section.weight})
           </Typography>
-          {(section.questions || []).map((q) => {
+          {(section.questions || [])
+            .filter((q): q is typeof q & { id: string } => !!q.id)
+            .map((q) => {
             const ans = answers[q.id] || { questionId: q.id };
             return (
               <Box key={q.id} sx={{ mb: 2 }}>
