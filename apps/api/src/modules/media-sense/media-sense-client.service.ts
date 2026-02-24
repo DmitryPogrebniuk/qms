@@ -1179,6 +1179,11 @@ export class MediaSenseClientService {
           ],
         },
       ],
+      // Paging: MediaSense may support paging to get more than default limit (e.g. 500/1500)
+      paging: {
+        offset: params.offset ?? 0,
+        limit: Math.min(params.limit ?? 500, 1000),
+      },
     };
 
     // Add optional filters

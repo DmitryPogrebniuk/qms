@@ -370,15 +370,15 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
         ? new Date(existingCheckpoint.backfillProgress.currentDate)
         : new Date(startDate);
 
-      const batchDays = 1; // Process one day at a time
+      const CHUNK_HOURS = 1; // 1-hour chunks to bypass MediaSense API result limits
       let processedBatches = 0;
-      const maxBatchesPerRun = backfillDaysPerRun; // Process up to N days per run (e.g. 30)
+      const maxBatchesPerRun = backfillDaysPerRun * 24; // Process up to N days worth of 1h chunks
 
       const pageSize = this.configService.get<number>('MEDIASENSE_SYNC_PAGE_SIZE') ?? this.DEFAULT_PAGE_SIZE;
 
       while (currentDate < endDate && processedBatches < maxBatchesPerRun) {
         const batchEnd = new Date(Math.min(
-          currentDate.getTime() + batchDays * 24 * 60 * 60 * 1000,
+          currentDate.getTime() + CHUNK_HOURS * 60 * 60 * 1000,
           endDate.getTime(),
         ));
 
@@ -524,7 +524,7 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
     this.isSyncing = true;
 
     try {
-      this.msLogger.info(`[${correlationId}] Starting reconciliation sync`, {
+      this.msLogger.info(`[${correlationId}] Starting reconciliation sync (1h chunks to bypass API limits)`, {
         triggeredBy,
         dateFrom: dateFrom.toISOString(),
         dateTo: dateTo.toISOString(),
@@ -533,22 +533,24 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
       await this.configureClient();
 
       const pageSize = this.configService.get<number>('MEDIASENSE_SYNC_PAGE_SIZE') ?? this.DEFAULT_PAGE_SIZE;
-      const maxPagesPerDay = 500; // Safety limit per day
+      const maxPagesPerChunk = 500; // Safety limit per time chunk
+      // Use 1-hour chunks to bypass MediaSense API result limits (e.g. 500/1500 per query)
+      const CHUNK_HOURS = 1;
 
-      let currentDate = new Date(dateFrom);
-      currentDate.setHours(0, 0, 0, 0);
+      let currentTime = new Date(dateFrom);
+      currentTime.setMinutes(0, 0, 0);
       const endDate = new Date(dateTo);
       endDate.setHours(23, 59, 59, 999);
 
-      while (currentDate <= endDate) {
-        const batchStart = new Date(currentDate);
-        const batchEnd = new Date(currentDate);
-        batchEnd.setHours(23, 59, 59, 999);
+      while (currentTime <= endDate) {
+        const batchStart = new Date(currentTime);
+        const batchEnd = new Date(currentTime.getTime() + CHUNK_HOURS * 60 * 60 * 1000);
+        if (batchEnd > endDate) batchEnd.setTime(endDate.getTime());
 
         let page = 1;
         let hasMore = true;
 
-        while (hasMore && page <= maxPagesPerDay) {
+        while (hasMore && page <= maxPagesPerChunk) {
           const sessions = await this.fetchSessions(batchStart, batchEnd, page, pageSize, correlationId);
 
           if (!sessions || sessions.length === 0) {
@@ -577,7 +579,7 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
           await this.delay(100);
         }
 
-        currentDate.setDate(currentDate.getDate() + 1);
+        currentTime.setTime(batchEnd.getTime());
       }
 
       const duration = Date.now() - startTime;

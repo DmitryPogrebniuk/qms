@@ -534,6 +534,9 @@ export default function MediaSenseSettings() {
       <Typography variant="subtitle2" color="text.secondary" sx={{ mt: 3, mb: 1 }}>
         {t('mediaSense.reconcileSection', 'Reconcile: check MediaSense for period, import missing recordings')}
       </Typography>
+      <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+        {t('mediaSense.reconcileHint', 'Uses 1-hour chunks + paging to bypass MediaSense API limits. If you expect more records, run reconcile for shorter periods or contact Cisco support about API limits.')}
+      </Typography>
       <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
         <TextField
           type="date"

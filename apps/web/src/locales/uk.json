@@ -371,7 +371,8 @@
     "reconcileUpdated": "Оновлено",
     "reconcileSkipped": "Пропущено",
     "reconcileErrors": "Помилок",
-    "reconcileDuration": "Тривалість"
+    "reconcileDuration": "Тривалість",
+    "reconcileHint": "Використовує 1-годинні інтервали та пагінацію для обходу обмежень MediaSense API. Якщо очікуєте більше записів — запустіть reconcile для коротших періодів або зверніться в підтримку Cisco щодо лімітів API."
   },
   "maintenance": {
     "title": "Обслуговування системи",

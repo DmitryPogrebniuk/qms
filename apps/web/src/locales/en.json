@@ -367,7 +367,8 @@
     "reconcileUpdated": "Updated",
     "reconcileSkipped": "Skipped",
     "reconcileErrors": "Errors",
-    "reconcileDuration": "Duration"
+    "reconcileDuration": "Duration",
+    "reconcileHint": "Uses 1-hour chunks + paging to bypass MediaSense API limits. If you expect more records, run reconcile for shorter periods or contact Cisco support about API limits."
   },
   "maintenance": {
     "title": "System Maintenance",
