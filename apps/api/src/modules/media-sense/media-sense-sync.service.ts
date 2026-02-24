@@ -732,18 +732,24 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
     }
     
     if (!Array.isArray(sessions) || sessions.length === 0) {
-      this.msLogger.warn(`[${correlationId}] No sessions found in response`, {
-        rawDataType: typeof rawData,
-        isArray: Array.isArray(rawData),
-        hasResponseBody: Boolean(rawData?.responseBody),
-        responseBodyKeys: rawData?.responseBody && typeof rawData.responseBody === 'object' 
-          ? Object.keys(rawData.responseBody) 
-          : 'N/A',
-        keys: rawData && typeof rawData === 'object' ? Object.keys(rawData) : 'N/A',
-        sample: rawData && typeof rawData === 'object' 
-          ? JSON.stringify(rawData).substring(0, 500) 
-          : String(rawData).substring(0, 500),
-      });
+      // Empty sessions is normal (e.g. no calls in this hour) - log DEBUG, not WARN
+      const hasValidStructure = rawData && typeof rawData === 'object' &&
+        (rawData.sessions !== undefined || rawData.responseBody?.sessions !== undefined);
+      if (hasValidStructure) {
+        this.msLogger.debug(`[${correlationId}] No sessions in response (empty for this period)`, {
+          keys: Object.keys(rawData),
+        });
+      } else {
+        this.msLogger.warn(`[${correlationId}] No sessions found in response (unexpected structure)`, {
+          rawDataType: typeof rawData,
+          isArray: Array.isArray(rawData),
+          hasResponseBody: Boolean(rawData?.responseBody),
+          keys: rawData && typeof rawData === 'object' ? Object.keys(rawData) : 'N/A',
+          sample: rawData && typeof rawData === 'object'
+            ? JSON.stringify(rawData).substring(0, 300)
+            : String(rawData).substring(0, 300),
+        });
+      }
       return [];
     }
     
