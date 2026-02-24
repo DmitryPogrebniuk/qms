@@ -102,6 +102,7 @@ export default function MediaSenseSettings() {
   const [reconcileResult, setReconcileResult] = useState<{
     success: boolean
     stats: { fetched: number; created: number; updated: number; skipped: number; errors: number }
+    message?: string
     duration: number
     error?: string
   } | null>(null)
@@ -566,12 +567,16 @@ export default function MediaSenseSettings() {
               const res = await reconcileSync(reconcileDateFrom, reconcileDateTo)
               setReconcileResult({
                 success: res.success,
-                stats: res.stats,
-                duration: res.duration,
+                stats: res.stats ?? { fetched: 0, created: 0, updated: 0, skipped: 0, errors: 0 },
+                duration: res.duration ?? 0,
                 error: res.error,
+                message: res.message,
               })
               if (res.success) {
-                setMessage({ type: 'success', text: t('mediaSense.reconcileSuccess', 'Reconciliation completed') })
+                setMessage({
+                  type: 'success',
+                  text: res.message ?? t('mediaSense.reconcileSuccess', 'Reconciliation completed'),
+                })
                 setTimeout(() => setMessage(null), 5000)
               } else {
                 setMessage({ type: 'error', text: res.error || t('mediaSense.reconcileFailed', 'Reconciliation failed') })
@@ -601,12 +606,18 @@ export default function MediaSenseSettings() {
       {reconcileResult && (
         <Paper sx={{ mt: 2, p: 2, bgcolor: reconcileResult.success ? '#e8f5e9' : '#ffebee' }}>
           <Typography variant="body2">
-            {t('mediaSense.reconcileStats', 'Fetched')}: {reconcileResult.stats.fetched} ·{' '}
-            {t('mediaSense.reconcileCreated', 'Created')}: {reconcileResult.stats.created} ·{' '}
-            {t('mediaSense.reconcileUpdated', 'Updated')}: {reconcileResult.stats.updated} ·{' '}
-            {t('mediaSense.reconcileSkipped', 'Skipped')}: {reconcileResult.stats.skipped} ·{' '}
-            {t('mediaSense.reconcileErrors', 'Errors')}: {reconcileResult.stats.errors} ·{' '}
-            {t('mediaSense.reconcileDuration', 'Duration')}: {(reconcileResult.duration / 1000).toFixed(1)}s
+            {reconcileResult.message ? (
+              reconcileResult.message
+            ) : (
+              <>
+                {t('mediaSense.reconcileStats', 'Fetched')}: {reconcileResult.stats.fetched} ·{' '}
+                {t('mediaSense.reconcileCreated', 'Created')}: {reconcileResult.stats.created} ·{' '}
+                {t('mediaSense.reconcileUpdated', 'Updated')}: {reconcileResult.stats.updated} ·{' '}
+                {t('mediaSense.reconcileSkipped', 'Skipped')}: {reconcileResult.stats.skipped} ·{' '}
+                {t('mediaSense.reconcileErrors', 'Errors')}: {reconcileResult.stats.errors} ·{' '}
+                {t('mediaSense.reconcileDuration', 'Duration')}: {(reconcileResult.duration / 1000).toFixed(1)}s
+              </>
+            )}
           </Typography>
           {reconcileResult.error && (
             <Alert severity="error" sx={{ mt: 1 }}>

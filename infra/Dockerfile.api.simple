@@ -14,8 +14,8 @@ COPY apps/api/src ./src
 # Install ALL dependencies directly (not workspace)
 RUN npm install --legacy-peer-deps --no-fund
 
-# Build TypeScript
-RUN npm run build || echo "Build may fail, will use ts-node"
+# Build TypeScript (ensure dist/ exists for sync worker)
+RUN npm run build || (mkdir -p dist && echo "Build failed, ts-node fallback")
 
 # Runtime stage
 FROM node:18-slim
@@ -53,8 +53,8 @@ COPY apps/api/src ./src
 COPY apps/api/prisma ./prisma
 COPY apps/api/tsconfig.json ./
 
-# Copy dist from builder if build succeeded (will be used if available)
-# Note: If build failed, we'll use ts-node at runtime
+# Copy dist from builder (sync worker uses dist/scripts/run-sync.js)
+COPY --from=builder /build/dist ./dist
 
 # Generate Prisma Client
 RUN npx prisma generate || true

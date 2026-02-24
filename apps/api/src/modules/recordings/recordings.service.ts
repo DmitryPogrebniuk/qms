@@ -1,5 +1,8 @@
 import { Injectable, Logger, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/common/prisma/prisma.service';
+import { spawn } from 'child_process';
+import { join } from 'path';
+import { existsSync } from 'fs';
 import { MediaSenseSyncService } from '../media-sense/media-sense-sync.service';
 import { OpenSearchService } from '../opensearch/opensearch.service';
 import { AuditAction } from '@prisma/client';
@@ -248,10 +251,10 @@ export class RecordingsService {
   }
 
   /**
-   * Trigger manual sync
+   * Trigger manual sync — запускає в child process, API залишається відзывчивим
    */
   async triggerSync() {
-    return this.syncService.triggerSyncNow();
+    return this.runSyncInBackground('incremental');
   }
 
   /**
@@ -270,7 +273,7 @@ export class RecordingsService {
   }
 
   /**
-   * Run reconciliation sync for a date range (check MediaSense vs our DB, import missing)
+   * Run reconciliation sync — запускає в child process, API залишається відзывчивим
    */
   async reconcileSync(dateFrom: string, dateTo: string) {
     const from = new Date(dateFrom);
@@ -286,7 +289,41 @@ export class RecordingsService {
     if (daysDiff > maxDays) {
       throw new BadRequestException(`Date range cannot exceed ${maxDays} days`);
     }
-    return this.syncService.runReconciliationSync(from, to, 'manual');
+    return this.runSyncInBackground('reconcile', dateFrom, dateTo);
+  }
+
+  /**
+   * Spawn sync in child process — не блокує event loop API
+   */
+  private runSyncInBackground(mode: 'incremental' | 'reconcile', dateFrom?: string, dateTo?: string) {
+    const LOCK_FILE = '/tmp/qms-mediasense-sync.lock';
+    if (existsSync(LOCK_FILE)) {
+      throw new BadRequestException('Sync already running in background. Check status or wait for completion.');
+    }
+
+    const scriptJs = join(__dirname, '../../scripts/run-sync.js');
+    const scriptTs = join(__dirname, '../../../src/scripts/run-sync.ts');
+    const useTs = !existsSync(scriptJs) && existsSync(scriptTs);
+    const execArgs = useTs
+      ? ['-r', 'tsconfig-paths/register', scriptTs]
+      : [scriptJs];
+    const args = mode === 'reconcile' && dateFrom && dateTo
+      ? ['reconcile', dateFrom, dateTo]
+      : ['incremental'];
+
+    const child = spawn(process.execPath, [...execArgs, ...args], {
+      env: { ...process.env },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: true,
+    });
+    child.unref();
+
+    this.logger.log(`Sync started in background (PID ${child.pid}), mode=${mode}`);
+    return {
+      success: true,
+      message: 'Sync started in background. Check status in a few minutes.',
+      pid: child.pid,
+    };
   }
 
   /**

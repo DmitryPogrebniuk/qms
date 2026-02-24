@@ -501,9 +501,11 @@ export async function resetSync(backfillDays?: number): Promise<{ message: strin
  */
 export interface ReconcileSyncResult {
   success: boolean;
-  correlationId: string;
-  duration: number;
-  stats: { fetched: number; created: number; updated: number; skipped: number; errors: number };
+  message?: string;
+  pid?: number;
+  correlationId?: string;
+  duration?: number;
+  stats?: { fetched: number; created: number; updated: number; skipped: number; errors: number };
   error?: string;
 }
 
