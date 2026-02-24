@@ -116,6 +116,7 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
   private readonly DEFAULT_BACKFILL_DAYS_PER_RUN = 30; // Process 30 days per backfill run
   
   private isSyncing = false;
+  private isReconciling = false;
   private syncEnabled = true;
 
   constructor(
@@ -510,18 +511,18 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
     const startTime = Date.now();
     const stats = { fetched: 0, created: 0, updated: 0, skipped: 0, errors: 0 };
 
-    if (this.isSyncing) {
-      this.msLogger.warn(`[${correlationId}] Sync already in progress, skipping reconciliation`);
+    if (this.isReconciling) {
+      this.msLogger.warn(`[${correlationId}] Reconcile already in progress, skipping`);
       return {
         success: false,
         correlationId,
         duration: 0,
         stats,
-        error: 'Sync already in progress',
+        error: 'Reconcile already in progress',
       };
     }
 
-    this.isSyncing = true;
+    this.isReconciling = true;
 
     try {
       this.msLogger.info(`[${correlationId}] Starting reconciliation sync (1h chunks to bypass API limits)`, {
@@ -546,6 +547,11 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
         const batchStart = new Date(currentTime);
         const batchEnd = new Date(currentTime.getTime() + CHUNK_HOURS * 60 * 60 * 1000);
         if (batchEnd > endDate) batchEnd.setTime(endDate.getTime());
+        // Skip chunks < 1 min (avoid API issues with near-identical from/to)
+        if (batchEnd.getTime() - batchStart.getTime() < 60000) {
+          currentTime.setTime(batchEnd.getTime());
+          continue;
+        }
 
         let page = 1;
         let hasMore = true;
@@ -608,7 +614,7 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
         error: errorMessage,
       };
     } finally {
-      this.isSyncing = false;
+      this.isReconciling = false;
     }
   }
 

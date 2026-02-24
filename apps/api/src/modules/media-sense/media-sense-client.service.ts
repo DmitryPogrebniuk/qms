@@ -791,6 +791,24 @@ export class MediaSenseClientService {
             duration: Date.now() - startTime,
           };
         }
+
+        // 2001 = "No results were found for this client request" - valid, return empty
+        if (responseCode === 2001) {
+          this.msLogger.debug(`[${requestId}] MediaSense 2001: no results for query (valid)`, {
+            requestId,
+            message: responseMessage,
+          });
+          const emptyData = (responseBody && typeof responseBody === 'object' && !Array.isArray(responseBody))
+            ? { ...responseBody, sessions: responseBody.sessions || [] }
+            : { sessions: [] };
+          return {
+            success: true,
+            data: emptyData as T,
+            statusCode: response.status,
+            requestId,
+            duration: Date.now() - startTime,
+          };
+        }
         
         // Check for other errors (responseCode exists and is not 2000)
         if (responseCode && responseCode !== 2000) {
@@ -1179,11 +1197,7 @@ export class MediaSenseClientService {
           ],
         },
       ],
-      // Paging: MediaSense may support paging to get more than default limit (e.g. 500/1500)
-      paging: {
-        offset: params.offset ?? 0,
-        limit: Math.min(params.limit ?? 500, 1000),
-      },
+      // Note: paging removed - MediaSense 11.5 may return 404 for unknown params
     };
 
     // Add optional filters
