@@ -798,8 +798,9 @@ export class MediaSenseClientService {
             requestId,
             message: responseMessage,
           });
-          const emptyData = (responseBody && typeof responseBody === 'object' && !Array.isArray(responseBody))
-            ? { ...responseBody, sessions: responseBody.sessions || [] }
+          const rb = responseBody as Record<string, unknown> | null | undefined;
+          const emptyData = (rb && typeof rb === 'object' && !Array.isArray(rb))
+            ? { ...rb, sessions: (rb.sessions as unknown[]) || [] }
             : { sessions: [] };
           return {
             success: true,
