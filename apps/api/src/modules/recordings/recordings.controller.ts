@@ -558,6 +558,16 @@ export class RecordingsController {
     return this.recordingsService.getSyncDiagnostics();
   }
 
+  /**
+   * Run reconciliation sync - check MediaSense for period, import missing records (admin only)
+   */
+  @Post('admin/sync-reconcile')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Reconcile recordings: check MediaSense for period, import missing (Admin only)' })
+  async reconcileSync(@Body() body: { dateFrom: string; dateTo: string }) {
+    return this.recordingsService.reconcileSync(body.dateFrom, body.dateTo);
+  }
+
   // ============================================================================
   // Helpers
   // ============================================================================

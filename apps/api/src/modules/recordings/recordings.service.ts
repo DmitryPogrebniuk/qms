@@ -270,6 +270,26 @@ export class RecordingsService {
   }
 
   /**
+   * Run reconciliation sync for a date range (check MediaSense vs our DB, import missing)
+   */
+  async reconcileSync(dateFrom: string, dateTo: string) {
+    const from = new Date(dateFrom);
+    const to = new Date(dateTo);
+    if (isNaN(from.getTime()) || isNaN(to.getTime())) {
+      throw new BadRequestException('Invalid date format. Use YYYY-MM-DD.');
+    }
+    if (from > to) {
+      throw new BadRequestException('dateFrom must be before or equal to dateTo');
+    }
+    const maxDays = 90;
+    const daysDiff = Math.ceil((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+    if (daysDiff > maxDays) {
+      throw new BadRequestException(`Date range cannot exceed ${maxDays} days`);
+    }
+    return this.syncService.runReconciliationSync(from, to, 'manual');
+  }
+
+  /**
    * Enforce row-level security
    */
   private async _enforceAccess(recording: any, userId: string, userRole: string): Promise<void> {

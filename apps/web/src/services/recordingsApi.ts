@@ -497,6 +497,25 @@ export async function resetSync(backfillDays?: number): Promise<{ message: strin
 }
 
 /**
+ * Reconcile sync - check MediaSense for period, import missing records (admin only)
+ */
+export interface ReconcileSyncResult {
+  success: boolean;
+  correlationId: string;
+  duration: number;
+  stats: { fetched: number; created: number; updated: number; skipped: number; errors: number };
+  error?: string;
+}
+
+export async function reconcileSync(dateFrom: string, dateTo: string): Promise<ReconcileSyncResult> {
+  const response = await httpClient.post<ReconcileSyncResult>('/recordings/admin/sync-reconcile', {
+    dateFrom,
+    dateTo,
+  });
+  return response.data;
+}
+
+/**
  * Sync diagnostics response (admin only)
  */
 export interface SyncDiagnostics {

@@ -143,9 +143,9 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Scheduled sync every 5 minutes
+   * Scheduled sync every 1 minute (minimal delay for new recordings visibility)
    */
-  @Cron(CronExpression.EVERY_5_MINUTES)
+  @Cron(CronExpression.EVERY_MINUTE)
   async scheduledSync(): Promise<void> {
     if (!this.syncEnabled) {
       return;
@@ -489,6 +489,119 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
         success: false,
         correlationId,
         duration: Date.now() - startTime,
+        stats,
+        error: errorMessage,
+      };
+    } finally {
+      this.isSyncing = false;
+    }
+  }
+
+  /**
+   * Run reconciliation sync for a specific date range.
+   * Fetches all sessions from MediaSense for the period and imports any missing records.
+   */
+  async runReconciliationSync(
+    dateFrom: Date,
+    dateTo: Date,
+    triggeredBy: string = 'manual',
+  ): Promise<SyncResult> {
+    const correlationId = uuidv4().substring(0, 8);
+    const startTime = Date.now();
+    const stats = { fetched: 0, created: 0, updated: 0, skipped: 0, errors: 0 };
+
+    if (this.isSyncing) {
+      this.msLogger.warn(`[${correlationId}] Sync already in progress, skipping reconciliation`);
+      return {
+        success: false,
+        correlationId,
+        duration: 0,
+        stats,
+        error: 'Sync already in progress',
+      };
+    }
+
+    this.isSyncing = true;
+
+    try {
+      this.msLogger.info(`[${correlationId}] Starting reconciliation sync`, {
+        triggeredBy,
+        dateFrom: dateFrom.toISOString(),
+        dateTo: dateTo.toISOString(),
+      });
+
+      await this.configureClient();
+
+      const pageSize = this.configService.get<number>('MEDIASENSE_SYNC_PAGE_SIZE') ?? this.DEFAULT_PAGE_SIZE;
+      const maxPagesPerDay = 500; // Safety limit per day
+
+      let currentDate = new Date(dateFrom);
+      currentDate.setHours(0, 0, 0, 0);
+      const endDate = new Date(dateTo);
+      endDate.setHours(23, 59, 59, 999);
+
+      while (currentDate <= endDate) {
+        const batchStart = new Date(currentDate);
+        const batchEnd = new Date(currentDate);
+        batchEnd.setHours(23, 59, 59, 999);
+
+        let page = 1;
+        let hasMore = true;
+
+        while (hasMore && page <= maxPagesPerDay) {
+          const sessions = await this.fetchSessions(batchStart, batchEnd, page, pageSize, correlationId);
+
+          if (!sessions || sessions.length === 0) {
+            hasMore = false;
+            break;
+          }
+
+          stats.fetched += sessions.length;
+
+          for (const session of sessions) {
+            try {
+              const result = await this.processSession(session, correlationId);
+              if (result === 'created') stats.created++;
+              else if (result === 'updated') stats.updated++;
+              else stats.skipped++;
+            } catch (err) {
+              stats.errors++;
+              this.msLogger.error(`[${correlationId}] Failed to process session ${session.sessionId}`, {
+                error: (err as Error).message,
+              });
+            }
+          }
+
+          page++;
+          hasMore = sessions.length === pageSize;
+          await this.delay(100);
+        }
+
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+
+      const duration = Date.now() - startTime;
+      this.msLogger.info(`[${correlationId}] Reconciliation sync completed`, {
+        duration,
+        stats,
+        dateFrom: dateFrom.toISOString(),
+        dateTo: dateTo.toISOString(),
+      });
+
+      return {
+        success: stats.errors === 0,
+        correlationId,
+        duration,
+        stats,
+      };
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      const errorMessage = (error as Error).message;
+      this.msLogger.error(`[${correlationId}] Reconciliation sync failed`, { error: errorMessage, duration, stats });
+      return {
+        success: false,
+        correlationId,
+        duration,
         stats,
         error: errorMessage,
       };

@@ -36,7 +36,7 @@ import BuildIcon from '@mui/icons-material/Build'
 import ContactSupportIcon from '@mui/icons-material/ContactSupport'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import DownloadIcon from '@mui/icons-material/Download'
-import { getSyncDiagnostics, type SyncDiagnostics } from '../../services/recordingsApi'
+import { getSyncDiagnostics, reconcileSync, type SyncDiagnostics } from '../../services/recordingsApi'
 
 interface MediaSenseConfig {
   apiUrl: string
@@ -92,6 +92,19 @@ export default function MediaSenseSettings() {
   // Sync diagnostics state
   const [diagnosticsLoading, setDiagnosticsLoading] = useState(false)
   const [diagnosticsResult, setDiagnosticsResult] = useState<SyncDiagnostics | null>(null)
+
+  // Reconcile sync state
+  const [reconcileDateFrom, setReconcileDateFrom] = useState(() =>
+    new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+  )
+  const [reconcileDateTo, setReconcileDateTo] = useState(() => new Date().toISOString().slice(0, 10))
+  const [reconcileLoading, setReconcileLoading] = useState(false)
+  const [reconcileResult, setReconcileResult] = useState<{
+    success: boolean
+    stats: { fetched: number; created: number; updated: number; skipped: number; errors: number }
+    duration: number
+    error?: string
+  } | null>(null)
 
   // Logs state
   const [logs, setLogs] = useState<LogEntry[]>([])
@@ -516,6 +529,89 @@ export default function MediaSenseSettings() {
           {t('mediaSense.createSupportRequest', 'Create support request')}
         </Button>
       </Box>
+
+      {/* Reconcile / Re-sync — перевірка і досинхронізація за період */}
+      <Typography variant="subtitle2" color="text.secondary" sx={{ mt: 3, mb: 1 }}>
+        {t('mediaSense.reconcileSection', 'Reconcile: check MediaSense for period, import missing recordings')}
+      </Typography>
+      <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+        <TextField
+          type="date"
+          size="small"
+          label={t('mediaSense.reconcileDateFrom', 'From')}
+          value={reconcileDateFrom}
+          onChange={(e) => setReconcileDateFrom(e.target.value)}
+          InputLabelProps={{ shrink: true }}
+          sx={{ width: 160 }}
+        />
+        <TextField
+          type="date"
+          size="small"
+          label={t('mediaSense.reconcileDateTo', 'To')}
+          value={reconcileDateTo}
+          onChange={(e) => setReconcileDateTo(e.target.value)}
+          InputLabelProps={{ shrink: true }}
+          sx={{ width: 160 }}
+        />
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={async () => {
+            setReconcileLoading(true)
+            setReconcileResult(null)
+            try {
+              const res = await reconcileSync(reconcileDateFrom, reconcileDateTo)
+              setReconcileResult({
+                success: res.success,
+                stats: res.stats,
+                duration: res.duration,
+                error: res.error,
+              })
+              if (res.success) {
+                setMessage({ type: 'success', text: t('mediaSense.reconcileSuccess', 'Reconciliation completed') })
+                setTimeout(() => setMessage(null), 5000)
+              } else {
+                setMessage({ type: 'error', text: res.error || t('mediaSense.reconcileFailed', 'Reconciliation failed') })
+              }
+              // Refresh diagnostics
+              setDiagnosticsResult(null)
+              const data = await getSyncDiagnostics()
+              setDiagnosticsResult(data)
+            } catch (e: any) {
+              setReconcileResult({
+                success: false,
+                stats: { fetched: 0, created: 0, updated: 0, skipped: 0, errors: 0 },
+                duration: 0,
+                error: e.response?.data?.message || e.message,
+              })
+              setMessage({ type: 'error', text: e.response?.data?.message || e.message })
+            } finally {
+              setReconcileLoading(false)
+            }
+          }}
+          disabled={reconcileLoading || !reconcileDateFrom || !reconcileDateTo}
+          startIcon={reconcileLoading ? <CircularProgress size={20} /> : <RefreshIcon />}
+        >
+          {t('mediaSense.reconcileRun', 'Run reconcile')}
+        </Button>
+      </Box>
+      {reconcileResult && (
+        <Paper sx={{ mt: 2, p: 2, bgcolor: reconcileResult.success ? '#e8f5e9' : '#ffebee' }}>
+          <Typography variant="body2">
+            {t('mediaSense.reconcileStats', 'Fetched')}: {reconcileResult.stats.fetched} ·{' '}
+            {t('mediaSense.reconcileCreated', 'Created')}: {reconcileResult.stats.created} ·{' '}
+            {t('mediaSense.reconcileUpdated', 'Updated')}: {reconcileResult.stats.updated} ·{' '}
+            {t('mediaSense.reconcileSkipped', 'Skipped')}: {reconcileResult.stats.skipped} ·{' '}
+            {t('mediaSense.reconcileErrors', 'Errors')}: {reconcileResult.stats.errors} ·{' '}
+            {t('mediaSense.reconcileDuration', 'Duration')}: {(reconcileResult.duration / 1000).toFixed(1)}s
+          </Typography>
+          {reconcileResult.error && (
+            <Alert severity="error" sx={{ mt: 1 }}>
+              {reconcileResult.error}
+            </Alert>
+          )}
+        </Paper>
+      )}
 
       {/* Sync diagnostics result */}
       {diagnosticsResult && (
