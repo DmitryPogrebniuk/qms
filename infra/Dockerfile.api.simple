@@ -26,6 +26,7 @@ WORKDIR /app
 # Install runtime dependencies
 # NOTE: Playwright for MediaSense; ffmpeg for MP3 export.
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
     openssl \
     ca-certificates \
     ffmpeg \
