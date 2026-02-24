@@ -239,7 +239,8 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
         stats.fetched += sessions.length;
 
         // Process each session
-        for (const session of sessions) {
+        for (let i = 0; i < sessions.length; i++) {
+          const session = sessions[i];
           try {
             const result = await this.processSession(session, correlationId);
             if (result === 'created') stats.created++;
@@ -257,13 +258,15 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
               error: (err as Error).message,
             });
           }
+          // Yield every 10 sessions — дає event loop обробити API-запити (фронт не зависає)
+          if ((i + 1) % 10 === 0) await this.yieldToEventLoop();
         }
 
         page++;
         hasMore = sessions.length === pageSize;
 
-        // Rate limiting - small delay between pages
-        await this.delay(100);
+        // Rate limiting — пауза між сторінками (зменшує навантаження на CPU)
+        await this.delay(200);
       }
 
       // Update checkpoint
@@ -399,7 +402,8 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
 
           stats.fetched += sessions.length;
 
-          for (const session of sessions) {
+          for (let i = 0; i < sessions.length; i++) {
+            const session = sessions[i];
             try {
               const result = await this.processSession(session, correlationId);
               if (result === 'created') stats.created++;
@@ -408,11 +412,12 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
             } catch (err) {
               stats.errors++;
             }
+            if ((i + 1) % 10 === 0) await this.yieldToEventLoop();
           }
 
           page++;
           hasMore = sessions.length === pageSize;
-          await this.delay(100);
+          await this.delay(300);
         }
 
         currentDate = batchEnd;
@@ -566,7 +571,8 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
 
           stats.fetched += sessions.length;
 
-          for (const session of sessions) {
+          for (let i = 0; i < sessions.length; i++) {
+            const session = sessions[i];
             try {
               const result = await this.processSession(session, correlationId);
               if (result === 'created') stats.created++;
@@ -578,11 +584,12 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
                 error: (err as Error).message,
               });
             }
+            if ((i + 1) % 10 === 0) await this.yieldToEventLoop();
           }
 
           page++;
           hasMore = sessions.length === pageSize;
-          await this.delay(100);
+          await this.delay(300);
         }
 
         currentTime.setTime(batchEnd.getTime());
@@ -1543,5 +1550,10 @@ export class MediaSenseSyncService implements OnModuleInit, OnModuleDestroy {
 
   private delay(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /** Yield to event loop — дає змогу API обробляти запити під час sync (уникаємо зависання фронту) */
+  private yieldToEventLoop(): Promise<void> {
+    return new Promise(resolve => setImmediate(resolve));
   }
 }
