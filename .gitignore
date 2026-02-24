@@ -20,3 +20,5 @@ postgres_data/
 redis_data/
 opensearch_data/
 prisma/migrations/dev/
+infra/nginx/ssl/*.crt
+infra/nginx/ssl/*.key
