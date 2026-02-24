@@ -121,7 +121,7 @@ services:
       OPENSEARCH_USERNAME: admin
       OPENSEARCH_PASSWORD: SecurePassword123!
       EXPORT_DIR: /app/exports
-      CORS_ORIGIN: http://localhost:5173,http://localhost:3000
+      CORS_ORIGIN: http://localhost:5173,http://localhost:3000,https://192.168.200.199,http://192.168.200.199
       LOG_LEVEL: debug
     ports:
       - "3000:3000"
