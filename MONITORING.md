@@ -39,11 +39,12 @@ sudo docker compose -f infra/docker-compose.yml -f infra/docker-compose.monitori
 | Prometheus | https://192.168.200.199:9090 | Метрики |
 | cAdvisor | https://192.168.200.199:8081 | Метрики Docker-контейнерів |
 
-**Grafana — перший вхід:**
-1. Логін: admin / admin
-2. Змінити пароль
-3. Add data source → Prometheus → URL: `http://prometheus:9090`
-4. Import dashboard: 193 (Docker) або 14282 (cAdvisor)
+**Налаштовано автоматично:**
+- Prometheus збирає метрики з cAdvisor (Docker CPU, RAM, мережа)
+- Grafana має datasource Prometheus
+- Дашборд "QMS Docker Containers" — CPU, Memory, Network по контейнерах
+
+**Перший вхід в Grafana:** admin / admin (рекомендується змінити пароль)
 
 ---
 
