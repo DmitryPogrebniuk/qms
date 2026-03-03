@@ -48,7 +48,25 @@ sudo docker compose -f infra/docker-compose.yml -f infra/docker-compose.monitori
 
 ---
 
-## 3. Існуючі скрипти
+## 3. AI Діагностика (qms-ai-diagnose.sh)
+
+```bash
+cd /opt/qms
+sudo ./qms-ai-diagnose.sh           # Вивести діагностику для вставки в Cursor/ChatGPT
+sudo ./qms-ai-diagnose.sh --ai     # Відправити в OpenAI, отримати рекомендації
+```
+
+**Для --ai:** потрібні `OPENAI_API_KEY`, `jq` (apt install jq).
+
+```bash
+OPENAI_API_KEY=sk-xxx sudo ./qms-ai-diagnose.sh --ai
+```
+
+AI проаналізує контейнери, логи, sync status і надасть рекомендації українською.
+
+---
+
+## 4. Інші скрипти
 
 | Скрипт | Призначення |
 |--------|-------------|
@@ -58,7 +76,7 @@ sudo docker compose -f infra/docker-compose.yml -f infra/docker-compose.monitori
 
 ---
 
-## 4. Логи Docker
+## 5. Логи Docker
 
 ```bash
 # Останні логи API
