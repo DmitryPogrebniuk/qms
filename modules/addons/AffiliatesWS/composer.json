@@ -1,0 +1,13 @@
+{
+    "name": "inetws/affiliatesws",
+    "description": "WHMCS Multi-Level Affiliate Module with Tier by Active Services",
+    "type": "whmcs-addon",
+    "autoload": {
+        "psr-4": {
+            "WHMCS\\Module\\Addon\\AffiliatesWS\\": "lib/"
+        }
+    },
+    "require": {
+        "php": ">=8.1"
+    }
+}
